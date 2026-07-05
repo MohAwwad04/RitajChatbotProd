@@ -1,0 +1,29 @@
+[project]
+name = "ritaj"
+version = "0.1.0"
+description = "Ritaj AI Assistant — RAG chatbot base (Gemma 4 + ChromaDB)"
+requires-python = ">=3.11"
+dependencies = [
+    "chromadb>=0.5",
+    "sentence-transformers>=3.0",
+    "rank-bm25>=0.2",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "pypdf>=4.0",
+    "python-dotenv>=1.0",
+    "httpx>=0.27",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ritaj"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

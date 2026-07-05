@@ -1,0 +1,43 @@
+# ---- Secrets / local config ----
+.env
+.env.local
+
+# ---- Python virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- Python bytecode / build artifacts ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.Python
+dist/
+build/
+
+# ---- Generated / runtime data (rebuilt with scripts/build_index.py) ----
+chroma_db/
+
+# ---- Caches ----
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.coverage
+htmlcov/
+
+# ---- Editor / IDE ----
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ---- Local agent / tooling settings ----
+.claude/
+
+# ---- OS junk ----
+.DS_Store
+**/.DS_Store
+Thumbs.db
