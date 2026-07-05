@@ -1,10 +1,10 @@
 [project]
 name = "ritaj"
 version = "0.1.0"
-description = "Ritaj AI Assistant — RAG chatbot base (Gemma 4 + ChromaDB)"
+description = "Ritaj AI Assistant — RAG chatbot base (Gemma 4 + Qdrant)"
 requires-python = ">=3.11"
 dependencies = [
-    "chromadb>=0.5",
+    "qdrant-client>=1.7",
     "sentence-transformers>=3.0",
     "rank-bm25>=0.2",
     "fastapi>=0.110",
@@ -13,6 +13,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "httpx>=0.27",
     "pydantic>=2.0",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]

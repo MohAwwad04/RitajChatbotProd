@@ -27,12 +27,19 @@ def _model() -> CrossEncoder:
     return CrossEncoder(settings.rerank_model)
 
 
-def rerank(
+def rerank_scored(
     question: str, passages: list[tuple[str, dict]], k: int
-) -> list[tuple[str, dict]]:
-    """Reorder passages by true (question, chunk) relevance; keep the top k."""
+) -> list[tuple[tuple[str, dict], float]]:
+    """Reorder passages by relevance; keep the top k as (passage, score) pairs."""
     if not passages:
         return []
     scores = _model().predict([[question, doc] for doc, _ in passages])
     ranked = sorted(zip(passages, scores), key=lambda pair: pair[1], reverse=True)
-    return [passage for passage, _ in ranked[:k]]
+    return [(passage, float(score)) for passage, score in ranked[:k]]
+
+
+def rerank(
+    question: str, passages: list[tuple[str, dict]], k: int
+) -> list[tuple[str, dict]]:
+    """Reorder passages by true (question, chunk) relevance; keep the top k."""
+    return [passage for passage, _ in rerank_scored(question, passages, k)]

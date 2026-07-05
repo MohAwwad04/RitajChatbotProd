@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ritaj — Admin Dashboard</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+  <style>
+    :root {
+      --bg: #0d1117; --panel: #161b22; --border: #30363d;
+      --text: #e6edf3; --muted: #8b949e; --accent: #f78166;
+      --green: #3fb950; --blue: #58a6ff; --amber: #f0b429; --red: #ff7b72;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex; flex-direction: column; height: 100vh;
+    }
+    header {
+      padding: 12px 20px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    }
+    header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+    header .sub { color: var(--muted); font-size: 12px; }
+    .pill {
+      display: inline-block; background: var(--panel); border: 1px solid var(--border);
+      border-radius: 999px; padding: 2px 10px; font-size: 12px; color: var(--muted);
+    }
+    .tabs { display: flex; gap: 6px; margin-left: auto; }
+    .tab {
+      background: var(--panel); border: 1px solid var(--border); color: var(--muted);
+      border-radius: 8px; padding: 6px 14px; font-size: 13px; cursor: pointer; font-weight: 600;
+    }
+    .tab.active { color: #0d1117; background: var(--accent); border-color: var(--accent); }
+    input[type=text], input[type=number], select {
+      background: var(--panel); border: 1px solid var(--border); color: var(--text);
+      border-radius: 8px; padding: 9px 12px; font-size: 14px; outline: none;
+    }
+    input:focus, select:focus { border-color: var(--accent); }
+    button {
+      background: var(--accent); color: #0d1117; border: 0; border-radius: 8px;
+      padding: 9px 16px; font-weight: 600; cursor: pointer;
+    }
+    button.ghost { background: var(--panel); color: var(--text); border: 1px solid var(--border); }
+    button:disabled { opacity: .5; cursor: default; }
+
+    /* ---- Tab 1: 3D + process ---- */
+    #view-viz { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .bar { padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; }
+    .bar input[type=text] { flex: 1; }
+    #status { color: var(--muted); font-size: 12px; }
+    /* process stepper */
+    .process {
+      display: flex; gap: 6px; padding: 8px 20px; border-bottom: 1px solid var(--border);
+      overflow-x: auto; align-items: center; background: rgba(22,27,34,.4);
+    }
+    .pstep {
+      display: flex; align-items: center; gap: 6px; flex: none;
+      font-size: 11px; color: var(--muted); padding: 3px 9px; border-radius: 999px;
+      border: 1px solid var(--border); background: var(--panel);
+    }
+    .pstep .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex: none; }
+    .pstep.active { color: var(--text); border-color: var(--amber); }
+    .pstep.active .dot { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+    .pstep.done { color: var(--text); border-color: var(--green); }
+    .pstep.done .dot { background: var(--green); }
+    .pstep.flag { color: var(--red); border-color: var(--red); }
+    .pstep.flag .dot { background: var(--red); }
+    .parrow { color: var(--muted); flex: none; font-size: 11px; }
+    .pgroup { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; flex: none; padding: 0 4px; }
+
+    #main { flex: 1; position: relative; min-height: 0; }
+    #plot { position: absolute; inset: 0; }
+    #coord-tip {
+      position: absolute; z-index: 60; display: none; pointer-events: none;
+      left: 50%; top: 50%; transform: translate(-50%, -50%); white-space: nowrap;
+      background: rgba(13,17,23,.92); border: 1px solid var(--border);
+      color: var(--amber); font: 13px ui-monospace, Menlo, monospace;
+      padding: 5px 10px; border-radius: 6px;
+    }
+    .card {
+      position: absolute; top: 14px; right: 14px; width: 360px; max-width: calc(100% - 28px);
+      max-height: calc(100% - 28px); overflow-y: auto; background: rgba(22,27,34,.92);
+      border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+      backdrop-filter: blur(4px); box-shadow: 0 8px 24px rgba(0,0,0,.45);
+    }
+    .card-left { left: 14px; right: auto; width: 400px; }
+    .card-title { font-weight: 600; font-size: 12px; color: var(--accent); margin-bottom: 8px; text-transform: uppercase; letter-spacing: .05em; }
+    .answer-body { white-space: pre-wrap; font-size: 13.5px; line-height: 1.55; }
+    .sources { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+    .sources h4 { margin: 0 0 6px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .sources .src { display: block; font-size: 12px; color: var(--blue); margin: 2px 0; }
+    .sources .src small { color: var(--muted); }
+    .stage { margin-bottom: 14px; }
+    .stage-head { font-size: 12px; font-weight: 600; display: flex; justify-content: space-between; }
+    .stage-head .metric { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+    .stage-note { font-size: 11px; color: var(--muted); margin: 2px 0 6px; }
+    .final-stage .stage-head { color: var(--accent); }
+    .row { display: flex; align-items: center; gap: 8px; padding: 3px 6px; border-radius: 6px; font-size: 12px; }
+    .row:nth-child(even) { background: rgba(255,255,255,.02); }
+    .row.final { background: rgba(247,129,102,.12); }
+    .row .pos { width: 16px; color: var(--muted); text-align: right; flex: none; }
+    .row .lbl { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row .lbl .rk { color: var(--muted); font-size: 10px; margin-left: 4px; }
+    .row .sc { flex: none; color: var(--blue); font-variant-numeric: tabular-nums; }
+    .final-stage .row .sc { color: var(--accent); }
+    .grounding { margin-top: 10px; font-size: 12px; }
+    .gbadge { display: inline-block; font-weight: 700; font-size: 11px; padding: 2px 8px; border-radius: 999px; }
+    .gbadge.grounded, .gbadge.ok { background: rgba(63,185,80,.15); color: var(--green); }
+    .gbadge.partial { background: rgba(240,180,41,.15); color: var(--amber); }
+    .gbadge.ungrounded { background: rgba(255,123,114,.15); color: var(--red); }
+    .grounding .meta { color: var(--muted); margin-left: 6px; }
+    .gflag { color: var(--muted); margin-top: 6px; }
+    .gflag .s { display: block; } .gflag .s .why { color: var(--red); }
+    .grepair { color: var(--red); font-size: 12px; margin-bottom: 6px; font-weight: 600; }
+
+    /* ---- Tab 2: calibration ---- */
+    #view-calib { flex: 1; overflow-y: auto; padding: 20px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 16px; align-items: start; }
+    .panel { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .panel-head { padding: 11px 16px; background: var(--panel); border-bottom: 1px solid var(--border); font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+    .panel-body { padding: 8px 16px 14px; }
+    .field { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid rgba(48,54,61,.5); }
+    .field:last-child { border-bottom: 0; }
+    .field .lab { flex: 1; }
+    .field .lab b { font-weight: 600; }
+    .field .lab .h { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .field input, .field select { width: 130px; flex: none; }
+    .req { font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 999px; letter-spacing: .04em; }
+    .req.live { background: rgba(63,185,80,.15); color: var(--green); }
+    .req.retrain { background: rgba(240,180,41,.15); color: var(--amber); }
+    .actions { display: flex; gap: 10px; align-items: center; margin: 4px 0 18px; flex-wrap: wrap; }
+    .toast { font-size: 12px; color: var(--muted); }
+    .toast.ok { color: var(--green); } .toast.warn { color: var(--amber); } .toast.err { color: var(--red); }
+    .depl { font-size: 12px; color: var(--muted); }
+    .depl div { padding: 5px 0; border-bottom: 1px solid rgba(48,54,61,.5); display: flex; justify-content: space-between; gap: 14px; }
+    .depl div:last-child { border-bottom: 0; }
+    .depl code { color: var(--text); }
+
+    /* eval/operations output */
+    .opbtns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .out { margin-top: 10px; }
+    .loading { color: var(--muted); font-size: 13px; padding: 8px 0; }
+    .scorecard { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px; background: var(--border); padding: 1px; border-radius: 8px; overflow: hidden; }
+    .scorecard > div { background: var(--bg); padding: 12px 8px; text-align: center; display: flex; flex-direction: column; gap: 2px; }
+    .scorecard .big { font-size: 20px; font-weight: 700; color: var(--accent); }
+    .scorecard > div > span:last-child { font-size: 11px; color: var(--muted); }
+    .evaltbl { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
+    .evaltbl th, .evaltbl td { text-align: center; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+    .evaltbl th { color: var(--muted); font-weight: 600; }
+    .evaltbl td.q { text-align: left; }
+    .evaltbl .ok { color: var(--green); } .evaltbl .no { color: var(--red); }
+    .barcell { display: inline-block; height: 8px; background: var(--accent); border-radius: 2px; vertical-align: middle; }
+
+    /* chunking sub-view */
+    .doc { border: 1px solid var(--border); border-radius: 12px; margin: 0 0 14px; overflow: hidden; }
+    .doc-head { display: flex; align-items: baseline; gap: 10px; padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--border); }
+    .doc-head .name { font-weight: 600; }
+    .doc-head .meta { color: var(--muted); font-size: 12px; }
+    .doc-head .count { margin-left: auto; color: var(--accent); font-size: 12px; font-weight: 600; }
+    .chunk { padding: 10px 16px; border-bottom: 1px solid var(--border); }
+    .chunk:last-child { border-bottom: 0; }
+    .chunk-head { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 6px; }
+    .chunk-head .idx { color: var(--muted); flex: none; }
+    .chunk-head .hdr { color: var(--blue); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chunk-head .w { margin-left: auto; color: var(--muted); flex: none; }
+    .badge { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; flex: none; }
+    .badge.table { background: rgba(88,166,255,.15); color: var(--blue); }
+    .badge.list { background: rgba(63,185,80,.15); color: var(--green); }
+    .chunk-text { font-size: 12px; white-space: pre-wrap; line-height: 1.5; max-height: 130px; overflow: hidden; opacity: .85; }
+
+    /* log tab */
+    #view-log { flex: 1; overflow-y: auto; padding: 20px; }
+    .logentry { border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; margin: 0 0 12px; background: var(--panel); }
+    .logentry__meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+    .logentry__q, .logentry__a { font-size: 13px; line-height: 1.55; margin: 4px 0; white-space: pre-wrap; }
+    .logentry__q b, .logentry__a b { display: inline-block; width: 16px; color: var(--accent); }
+    .logentry__a { color: var(--text); opacity: .92; }
+    .logentry__tags { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Ritaj · Admin</h1>
+    <span class="sub">3D + pipeline view and live calibration. <span id="variance" class="pill">loading…</span></span>
+    <div class="tabs">
+      <button class="tab active" id="tab-viz">3D &amp; Process</button>
+      <button class="tab" id="tab-calib">Calibration</button>
+      <button class="tab" id="tab-log">Log</button>
+    </div>
+  </header>
+
+  <!-- ============ TAB 1: 3D + PROCESS ============ -->
+  <div id="view-viz">
+    <div class="bar">
+      <input id="q" type="text" placeholder="Ask something (e.g. ما هي رسوم التسجيل؟ / when does the semester start?) — watch every step run" />
+      <button id="go">Run</button>
+      <span id="status"></span>
+    </div>
+
+    <!-- Every pipeline step, lit up live as a query runs. -->
+    <div class="process" id="process"></div>
+
+    <div id="main">
+      <div id="coord-tip"></div>
+      <div id="plot"></div>
+      <div id="funnel" class="card card-left" style="display:none">
+        <div class="card-title">Retrieval funnel</div>
+        <div id="funnel-body"></div>
+      </div>
+      <div id="answer" class="card" style="display:none">
+        <div class="card-title">Answer</div>
+        <div id="answer-body" class="answer-body" dir="auto"></div>
+        <div id="answer-grounding" class="grounding"></div>
+        <div id="answer-sources" class="sources"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ TAB 2: CALIBRATION ============ -->
+  <div id="view-calib" style="display:none">
+    <div class="actions">
+      <button id="save">Save calibration</button>
+      <button id="reset" class="ghost">Reset to defaults</button>
+      <span id="cfg-toast" class="toast"></span>
+    </div>
+    <div class="grid" id="calib-grid"></div>
+
+    <h3 style="margin:24px 0 10px">Operations</h3>
+    <div class="grid">
+      <div class="panel">
+        <div class="panel-head">🛠 Training (rebuild index)</div>
+        <div class="panel-body">
+          <p class="depl" style="margin:0 0 10px">Re-chunks <code>data/raw/</code> with the current chunking settings, re-embeds, and upserts into Qdrant. Run after changing any <span class="req retrain">RETRAIN</span> parameter.</p>
+          <div class="opbtns"><button id="op-train">Rebuild index</button><span id="train-out" class="toast"></span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head">🎯 Golden-set evaluation</div>
+        <div class="panel-body">
+          <p class="depl" style="margin:0 0 10px">Full pipeline (retrieve → answer → grounding → repair) over the labelled set. Slow — one LLM call per case.</p>
+          <div class="opbtns">
+            <button id="op-golden">Run golden set</button>
+            <label class="depl"><input type="checkbox" id="judge-on" /> + LLM-as-judge</label>
+          </div>
+          <div class="out" id="golden-out"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head">📐 Grounding-threshold sweep</div>
+        <div class="panel-body">
+          <p class="depl" style="margin:0 0 10px">Shows how many genuinely-correct answers stay <i>grounded</i> at each threshold — pick the value to save above.</p>
+          <div class="opbtns"><button id="op-threshold">Run sweep</button></div>
+          <div class="out" id="threshold-out"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head">🧪 Chunking benchmark</div>
+        <div class="panel-body">
+          <p class="depl" style="margin:0 0 10px">Dense-retrieval recall by chunk size and strategy (window vs structure-aware).</p>
+          <div class="opbtns"><button id="op-chunking">Run benchmark</button></div>
+          <div class="out" id="chunking-out"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head">📦 Chunk inspector</div>
+        <div class="panel-body">
+          <p class="depl" style="margin:0 0 10px">How each document currently splits into chunks (matches the live index).</p>
+          <div class="opbtns"><button id="op-chunks" class="ghost">Show chunks</button></div>
+          <div class="out" id="chunks-out"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head">⚙ Deployment (restart-only)</div>
+        <div class="panel-body"><div class="depl" id="depl"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ TAB 3: LOG ============ -->
+  <div id="view-log" style="display:none">
+    <div class="actions">
+      <button id="log-refresh">Refresh</button>
+      <button id="log-clear" class="ghost">Clear log</button>
+      <span class="toast">What students ask the assistant and how it answered. <b>Future:</b> user names &amp; per-conversation grouping.</span>
+    </div>
+    <div id="log-out"></div>
+  </div>
+
+  <script>
+    const esc = s => (s || "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+    // ============ Operator auth ============
+    // When the server has ADMIN_TOKEN set, every /admin/* API call must carry
+    // it. We wrap fetch so all existing call sites send the stored token, and
+    // on a 401 we prompt once, remember the token, and reload.
+    const _fetch = window.fetch.bind(window);
+    window.fetch = async (url, opts = {}) => {
+      const isAdmin = typeof url === "string" && url.startsWith("/admin");
+      if (isAdmin) {
+        const token = localStorage.getItem("ritaj_admin_token") || "";
+        opts.headers = { ...(opts.headers || {}), "X-Admin-Token": token };
+      }
+      const resp = await _fetch(url, opts);
+      if (isAdmin && resp.status === 401) {
+        const entered = prompt("Admin token required (set as ADMIN_TOKEN on the server):");
+        if (entered) {
+          localStorage.setItem("ritaj_admin_token", entered.trim());
+          location.reload();
+        }
+      }
+      return resp;
+    };
+
+    // ============ Process stepper ============
+    // Every step in the pipeline; the answering ones light up live per query.
+    const STEPS = [
+      { g: "Index" }, { id: "read", t: "read" }, { id: "chunk", t: "chunk" },
+      { id: "embed", t: "embed" }, { id: "upsert", t: "upsert" }, { id: "bm25", t: "BM25" },
+      { g: "Answer" }, { id: "scope", t: "scope guard" }, { id: "dense", t: "dense" },
+      { id: "sparse", t: "BM25 search" }, { id: "rrf", t: "RRF fusion" }, { id: "rerank", t: "rerank" },
+      { id: "prompt", t: "fence + prompt" }, { id: "generate", t: "generate" },
+      { id: "injection", t: "injection scan" }, { id: "grounding", t: "grounding" }, { id: "repair", t: "repair" },
+    ];
+    function buildProcess() {
+      const el = document.getElementById("process");
+      const parts = [];
+      STEPS.forEach((s, i) => {
+        if (s.g) { parts.push(`<span class="pgroup">${s.g}</span>`); return; }
+        if (i && !STEPS[i - 1].g) parts.push('<span class="parrow">→</span>');
+        parts.push(`<span class="pstep" id="ps-${s.id}"><span class="dot"></span>${s.t}</span>`);
+      });
+      el.innerHTML = parts.join("");
+    }
+    function step(id, state) {
+      const el = document.getElementById("ps-" + id);
+      if (el) el.className = "pstep" + (state ? " " + state : "");
+    }
+    function resetSteps() {
+      STEPS.forEach(s => s.id && step(s.id, ""));
+      // Indexing steps are always "done" (the index already exists).
+      ["read", "chunk", "embed", "upsert", "bm25"].forEach(id => step(id, "done"));
+    }
+
+    // ============ 3D plot ============
+    const PLOT = document.getElementById("plot");
+    const STATUS = document.getElementById("status");
+    let POINTS = [], idToPoint = {};
+    const layout = {
+      paper_bgcolor: "#0d1117", plot_bgcolor: "#0d1117", font: { color: "#e6edf3" },
+      margin: { l: 0, r: 0, t: 0, b: 0 }, showlegend: true,
+      legend: { bgcolor: "rgba(22,27,34,0.6)", font: { size: 11 } },
+      scene: { xaxis: axis("PC 1"), yaxis: axis("PC 2"), zaxis: axis("PC 3") },
+    };
+    function axis(title) {
+      return { title: { text: title, font: { size: 11, color: "#8b949e" } },
+        backgroundcolor: "#0d1117", gridcolor: "#30363d", zerolinecolor: "#30363d",
+        showbackground: true, color: "#8b949e" };
+    }
+    function wrap(s, n) { const o = []; for (let i = 0; i < s.length; i += n) o.push(s.slice(i, i + n)); return o.join("<br>"); }
+    const PALETTE = ["#58a6ff","#3fb950","#f78166","#bc8cff","#e3b341","#39c5cf","#ff7b72","#d2a8ff"];
+    const sourceColor = {};
+    function colorFor(src) {
+      if (!(src in sourceColor)) sourceColor[src] = PALETTE[Object.keys(sourceColor).length % PALETTE.length];
+      return sourceColor[src];
+    }
+    function chunkTrace() {
+      return { type: "scatter3d", mode: "markers+text", name: "chunks",
+        x: POINTS.map(p => p.x), y: POINTS.map(p => p.y), z: POINTS.map(p => p.z),
+        text: POINTS.map(p => p.title || p.id), textposition: "top center",
+        textfont: { size: 9, color: "#8b949e" },
+        hovertext: POINTS.map(p => `<b>${p.title}</b><br><i>${p.source}</i><br>${wrap(p.text, 60)}`),
+        hoverinfo: "text",
+        marker: { size: 6, color: POINTS.map(p => colorFor(p.source)), line: { width: 0.5, color: "#0d1117" } } };
+    }
+    async function loadPoints() {
+      const r = await fetch("/admin/points");
+      const data = await r.json();
+      POINTS = data.points; idToPoint = {};
+      POINTS.forEach(p => { idToPoint[p.id] = p; });
+      const ev = (data.explained_variance || []).reduce((a, b) => a + b, 0);
+      document.getElementById("variance").textContent =
+        `${POINTS.length} chunks · 3 axes keep ${(ev * 100).toFixed(0)}% of variance`;
+      Plotly.newPlot(PLOT, [chunkTrace()], layout, { responsive: true });
+      const tip = document.getElementById("coord-tip");
+      PLOT.on("plotly_click", ev => {
+        const p = ev.points && ev.points[0];
+        if (!p || p.x === undefined) return;
+        tip.textContent = `[${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}]`;
+        tip.style.display = "block";
+      });
+      PLOT.on("plotly_relayout", () => { tip.style.display = "none"; });
+    }
+    async function fetchJSON(url, message) {
+      const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }) });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }
+    function renderPlot(q, highlight) {
+      document.getElementById("coord-tip").style.display = "none";
+      const rankOf = new Map(highlight.map((h, i) => [h.id, i + 1]));
+      const chunks = chunkTrace();
+      chunks.marker.size = POINTS.map(p => rankOf.has(p.id) ? 11 : 6);
+      chunks.marker.line = { width: POINTS.map(p => rankOf.has(p.id) ? 2.5 : 0.5),
+        color: POINTS.map(p => rankOf.has(p.id) ? "#f78166" : "#0d1117") };
+      const queryTrace = { type: "scatter3d", mode: "markers+text", name: "your query",
+        x: [q.x], y: [q.y], z: [q.z], text: ["▲ query"], textposition: "bottom center",
+        textfont: { color: "#f78166", size: 11 },
+        hovertext: [`<b>query</b><br>${wrap(q.text, 60)}`], hoverinfo: "text",
+        marker: { size: 9, symbol: "diamond", color: "#f78166", line: { width: 1, color: "#fff" } } };
+      const lines = highlight.map((h, i) => {
+        const p = idToPoint[h.id]; if (!p) return null;
+        return { type: "scatter3d", mode: "lines", showlegend: false,
+          x: [q.x, p.x], y: [q.y, p.y], z: [q.z, p.z],
+          line: { color: "#f78166", width: i === 0 ? 4 : 2, dash: i === 0 ? "solid" : "dot" },
+          hovertext: [`#${i + 1} final · ${p.title}`], hoverinfo: "text" };
+      }).filter(Boolean);
+      Plotly.react(PLOT, [chunks, ...lines, queryTrace], layout, { responsive: true });
+    }
+
+    // ============ Funnel + answer ============
+    const funnel = document.getElementById("funnel"), funnelBody = document.getElementById("funnel-body");
+    function renderFunnel(t) {
+      funnel.style.display = "block";
+      funnelBody.innerHTML = t.stages.map(stage => {
+        const rows = stage.items.map((it, i) => {
+          const ranks = it.dense_rank ? `<span class="rk">d#${it.dense_rank}·s#${it.sparse_rank}</span>` : "";
+          const tip = (it.text || "").replace(/"/g, "&quot;");
+          return `<div class="row${stage.final ? " final" : ""}"><span class="pos">${i + 1}</span>
+            <span class="lbl" title="${tip}">${it.title || it.id}${ranks}</span>
+            <span class="sc">${it.score}</span></div>`;
+        }).join("");
+        return `<div class="stage${stage.final ? " final-stage" : ""}">
+          <div class="stage-head">${stage.name}<span class="metric">${stage.metric}</span></div>
+          <div class="stage-note">${stage.note}</div>${rows}</div>`;
+      }).join("");
+    }
+    const answerCard = document.getElementById("answer"), answerBody = document.getElementById("answer-body");
+    const answerSources = document.getElementById("answer-sources"), answerGrounding = document.getElementById("answer-grounding");
+    function setAnswerLoading() {
+      answerCard.style.display = "block"; answerBody.textContent = "Generating answer…";
+      answerSources.innerHTML = ""; answerGrounding.innerHTML = "";
+    }
+    function renderGrounding(g) {
+      if (!g || g.verdict === "empty") { answerGrounding.innerHTML = ""; return; }
+      const label = { grounded: "grounded ✓", ok: "no claims to check",
+        partial: "partly grounded ⚠", ungrounded: "ungrounded ✕" }[g.verdict] || g.verdict;
+      let html = `<span class="gbadge ${g.verdict}">${label}</span>`;
+      if (g.n_claims) html += `<span class="meta">${g.n_grounded}/${g.n_claims} claims supported (sim ≥ ${g.threshold})</span>`;
+      const flagged = (g.sentences || []).filter(s => s.is_claim && !s.grounded);
+      if (flagged.length) {
+        html += `<div class="gflag">` + flagged.map(s => {
+          const why = s.unsupported_numbers.length ? `number ${s.unsupported_numbers.join(", ")} not in source`
+            : (s.invalid_cites.length ? `invalid citation [${s.invalid_cites.join(", ")}]` : `weak support (${s.support})`);
+          return `<span class="s">⚠ "${esc(s.text.slice(0, 70))}" — <span class="why">${why}</span></span>`;
+        }).join("") + `</div>`;
+      }
+      answerGrounding.innerHTML = html;
+    }
+    function renderSources(sources) {
+      const seen = new Set();
+      const items = (sources || []).filter(s => { const k = s.title || s.source; if (seen.has(k)) return false; seen.add(k); return true; });
+      answerSources.innerHTML = items.length
+        ? "<h4>Sources</h4>" + items.map(s => `<span class="src">• ${esc(s.title || s.source)} <small>${esc(s.source || "")}</small></span>`).join("")
+        : "";
+    }
+    async function fetchAnswer(text) {
+      step("scope", "active");
+      const r = await fetch("/chat/stream", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text }) });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const reader = r.body.getReader(), decoder = new TextDecoder();
+      let buf = "", full = "", started = false, errored = false;
+      function handleEvent(part) {
+        const line = part.trim().split("\n").find(l => l.startsWith("data:"));
+        if (!line) return false;
+        const msg = JSON.parse(line.slice(5).trim());
+        if (msg.type === "sources") { step("scope", "done"); step("prompt", "done"); renderSources(msg.sources); }
+        else if (msg.type === "injection") { step("injection", "flag"); }
+        else if (msg.type === "token") {
+          step("generate", "active");
+          if (!started) { answerBody.textContent = ""; started = true; }
+          full += msg.text; answerBody.textContent = full;
+        } else if (msg.type === "blocked") {
+          started = true; step("scope", "flag");
+          answerGrounding.innerHTML = ""; answerSources.innerHTML = ""; answerBody.textContent = msg.answer;
+        } else if (msg.type === "about") {
+          // Fixed "who made this" credit — no retrieval/LLM runs, so settle the
+          // pipeline stages and just show the text (photos appear in the portal).
+          started = true;
+          step("scope", "done"); step("prompt", "done"); step("generate", "done"); step("grounding", "done");
+          answerGrounding.innerHTML = ""; answerSources.innerHTML = "";
+          answerBody.textContent = msg.answer + (msg.images && msg.images.length
+            ? "\n\n[" + msg.images.length + " team photo(s) shown in the student portal]" : "");
+        } else if (msg.type === "grounding") { step("generate", "done"); step("injection", document.getElementById("ps-injection").classList.contains("flag") ? "flag" : "done"); step("grounding", "done"); renderGrounding(msg.grounding); }
+        else if (msg.type === "repair") {
+          started = true; step("repair", "flag"); answerBody.textContent = msg.answer;
+          answerGrounding.insertAdjacentHTML("afterbegin", '<div class="grepair">draft withheld/trimmed — failed grounding; showing repaired answer</div>');
+        } else if (msg.type === "error") {
+          errored = true; answerGrounding.innerHTML = "";
+          answerBody.textContent = "The answer couldn't be generated: " + msg.message +
+            "\n\n(Is the LLM server running? Start Ollama, or check LLM_BASE_URL in .env.)";
+        }
+        if (msg.type === "done" && !document.getElementById("ps-repair").classList.contains("flag")) step("repair", "done");
+        return msg.type === "done";
+      }
+      while (true) {
+        const { value, done } = await reader.read(); if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split("\n\n"); buf = parts.pop();
+        for (const part of parts) handleEvent(part);
+        if (errored) { reader.cancel(); break; }
+      }
+      if (buf.trim() && !errored) handleEvent(buf);
+      if (!started && !errored) answerBody.textContent = "No answer text returned. Check Ollama / LLM_MODEL in .env.";
+    }
+    const input = document.getElementById("q"), btn = document.getElementById("go");
+    async function run() {
+      const text = input.value.trim(); if (!text) return;
+      btn.disabled = true; STATUS.textContent = "running…";
+      resetSteps(); funnel.style.display = "block"; funnelBody.textContent = "Running funnel…"; setAnswerLoading();
+      fetchAnswer(text).catch(e => { answerBody.textContent = "Couldn't generate an answer: " + e; });
+      ["dense", "sparse", "rrf", "rerank"].forEach(id => step(id, "active"));
+      const [proj, tr] = await Promise.allSettled([fetchJSON("/admin/query", text), fetchJSON("/admin/trace", text)]);
+      let highlight = [];
+      if (tr.status === "fulfilled") {
+        ["dense", "sparse", "rrf", "rerank"].forEach(id => step(id, "done"));
+        renderFunnel(tr.value); highlight = tr.value.final_ids.map(id => ({ id }));
+      } else { funnelBody.textContent = "funnel error: " + tr.reason; }
+      if (proj.status === "fulfilled") {
+        renderPlot(proj.value, highlight);
+        if (tr.status === "fulfilled") {
+          const top = tr.value.stages[tr.value.stages.length - 1].items[0];
+          STATUS.textContent = top ? `top: ${top.title} (relevance ${top.score})` : "";
+        }
+      } else { STATUS.textContent = "plot error: " + proj.reason; }
+      btn.disabled = false;
+    }
+    btn.addEventListener("click", run);
+    input.addEventListener("keydown", e => { if (e.key === "Enter") run(); });
+
+    // ============ Top-level tabs ============
+    let calibLoaded = false;
+    const VIEWS = { viz: "view-viz", calib: "view-calib", log: "view-log" };
+    function showTab(name) {
+      for (const [key, viewId] of Object.entries(VIEWS)) {
+        const on = key === name;
+        document.getElementById("tab-" + key).classList.toggle("active", on);
+        document.getElementById(viewId).style.display = on ? (key === "viz" ? "flex" : "block") : "none";
+      }
+      if (name === "viz" && PLOT.data) Plotly.Plots.resize(PLOT);
+      if (name === "calib" && !calibLoaded) { calibLoaded = true; loadConfig(); }
+      if (name === "log") loadLog();
+    }
+    document.getElementById("tab-viz").onclick = () => showTab("viz");
+    document.getElementById("tab-calib").onclick = () => showTab("calib");
+    document.getElementById("tab-log").onclick = () => showTab("log");
+
+    // ============ Log tab: what users asked + how the bot answered ============
+    async function loadLog() {
+      const out = document.getElementById("log-out");
+      out.innerHTML = '<div class="loading">Loading…</div>';
+      try {
+        const { entries } = await (await fetch("/admin/log")).json();
+        if (!entries.length) { out.innerHTML = '<div class="loading">No interactions logged yet. Ask the assistant something at <code>/</code>, then refresh.</div>'; return; }
+        out.innerHTML = entries.map(e => {
+          const when = (e.ts || "").replace("T", " ").replace("+00:00", " UTC");
+          const tag = e.blocked
+            ? `<span class="gbadge ungrounded">blocked: ${esc(e.blocked)}</span>`
+            : `<span class="gbadge ${e.verdict || "ok"}">${esc(e.verdict || "—")}</span>`;
+          const flags = (e.repaired ? '<span class="gbadge partial">repaired</span>' : "")
+            + (e.injection ? '<span class="gbadge ungrounded">injection</span>' : "");
+          const who = [e.user || "anonymous", e.client, e.session ? "chat " + String(e.session).slice(0, 8) : null]
+            .filter(Boolean).join(" · ");
+          return `<div class="logentry">
+            <div class="logentry__meta"><span>${esc(who)}</span><span>${esc(when)}</span></div>
+            <div class="logentry__q"><b>Q</b> ${esc(e.question)}</div>
+            <div class="logentry__a"><b>A</b> ${esc(e.answer)}</div>
+            <div class="logentry__tags">${tag} ${flags}</div>
+          </div>`;
+        }).join("");
+      } catch (e) { out.innerHTML = '<div class="loading">Error: ' + e + '</div>'; }
+    }
+    document.getElementById("log-refresh").onclick = loadLog;
+    document.getElementById("log-clear").onclick = async () => {
+      if (!confirm("Clear the entire chat log? This cannot be undone.")) return;
+      await fetch("/admin/log/clear", { method: "POST" });
+      loadLog();
+    };
+
+    // ============ Calibration form ============
+    let SPEC = [];
+    function fieldInput(s, val) {
+      if (s.type === "enum")
+        return `<select id="f-${s.key}">${s.options.map(o => `<option ${o === val ? "selected" : ""}>${o}</option>`).join("")}</select>`;
+      if (s.type === "str")
+        return `<input type="text" id="f-${s.key}" value="${esc(String(val))}" placeholder=".env default" />`;
+      const step = s.step || 1;
+      return `<input type="number" id="f-${s.key}" value="${val}" min="${s.min}" max="${s.max}" step="${step}" />`;
+    }
+    async function loadConfig() {
+      const data = await (await fetch("/admin/config")).json();
+      SPEC = data.spec;
+      const groups = {};
+      SPEC.forEach(s => { (groups[s.group] = groups[s.group] || []).push(s); });
+      document.getElementById("calib-grid").innerHTML = Object.entries(groups).map(([g, items]) => `
+        <div class="panel"><div class="panel-head">${g}</div><div class="panel-body">
+          ${items.map(s => `<div class="field">
+            <div class="lab"><b>${s.label}</b> <span class="req ${s.requires}">${s.requires === "retrain" ? "RETRAIN" : "LIVE"}</span>
+              <span class="h">${s.help}</span></div>
+            ${fieldInput(s, data.values[s.key])}
+          </div>`).join("")}
+        </div></div>`).join("");
+      const d = data.deployment;
+      document.getElementById("depl").innerHTML = Object.entries(d)
+        .map(([k, v]) => `<div><span>${k}</span><code>${esc(String(v))}</code></div>`).join("");
+    }
+    function collectValues() {
+      const out = {};
+      SPEC.forEach(s => {
+        const el = document.getElementById("f-" + s.key);
+        out[s.key] = s.type === "int" ? parseInt(el.value) : s.type === "float" ? parseFloat(el.value) : el.value;
+      });
+      return out;
+    }
+    function toast(id, msg, cls) { const t = document.getElementById(id); t.textContent = msg; t.className = "toast " + (cls || ""); }
+    document.getElementById("save").onclick = async () => {
+      toast("cfg-toast", "Saving…");
+      const r = await fetch("/admin/config", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(collectValues()) });
+      if (r.ok) { await loadConfig(); toast("cfg-toast", "Saved to calibration.json. Retrain-flagged changes need a Rebuild index below.", "ok"); }
+      else toast("cfg-toast", "Save failed: HTTP " + r.status, "err");
+    };
+    document.getElementById("reset").onclick = async () => {
+      const r = await fetch("/admin/config/reset", { method: "POST" });
+      if (r.ok) { calibLoaded = false; await loadConfig(); calibLoaded = true; toast("cfg-toast", "Reset to defaults.", "ok"); }
+    };
+
+    // ============ Operations ============
+    const tick = b => b ? '<span class="ok">✓</span>' : '<span class="no">✗</span>';
+    function busy(out, msg) { out.innerHTML = `<div class="loading">${msg}</div>`; }
+
+    document.getElementById("op-train").onclick = async () => {
+      const t = document.getElementById("train-out");
+      const b = document.getElementById("op-train"); b.disabled = true;
+      toast("train-out", "Rebuilding index… (re-embeds the corpus, slow)");
+      try {
+        const d = await (await fetch("/admin/train", { method: "POST" })).json();
+        toast("train-out", `Done — ${d.chunks_indexed} chunks (${d.strategy}, ${d.chunk_target}w/${d.chunk_overlap}o).`, "ok");
+        await loadPoints();  // index changed → refresh the 3D space
+      } catch (e) { toast("train-out", "Failed: " + e, "err"); }
+      finally { b.disabled = false; }
+    };
+
+    function opRunner(btnId, outId, url, render) {
+      const b = document.getElementById(btnId), out = document.getElementById(outId);
+      b.onclick = async () => {
+        b.disabled = true; busy(out, "Running… this is slow (calls the models live).");
+        try { render(out, await (await fetch(typeof url === "function" ? url() : url)).json()); }
+        catch (e) { busy(out, "Error: " + e + " — is the LLM server running?"); }
+        finally { b.disabled = false; }
+      };
+    }
+    function renderGolden(out, d) {
+      const s = d.summary;
+      const ans = d.cases.filter(c => c.type === "answerable"), ref = d.cases.filter(c => c.type === "refuse");
+      const judged = s.judge_faithful_pct !== undefined;
+      const rows = ans.map(c => `<tr><td>${tick(c.retrieval)}</td><td>${tick(c.answer)}</td><td>${tick(c.grounded)}</td>` +
+        (judged ? `<td>${c.judge ? tick(c.judge.faithful) : "·"}</td>` : "") + `<td class="q">${esc(c.q)}</td></tr>`).join("");
+      const refRows = ref.map(c => `<tr><td>${tick(c.refused)}</td><td colspan="${judged ? 4 : 3}" class="q">${esc(c.q)}</td></tr>`).join("");
+      out.innerHTML = `<div class="scorecard">
+          <div><span class="big">${s.retrieval_pct}%</span><span>retrieval@k</span></div>
+          <div><span class="big">${s.accuracy_pct}%</span><span>answer accuracy</span></div>
+          <div><span class="big">${s.grounded_pct}%</span><span>grounded</span></div>
+          <div><span class="big">${s.false_refusal_pct}%</span><span>false-refusal</span></div>
+          <div><span class="big">${s.refused_pct}%</span><span>refused correctly</span></div>
+          <div><span class="big">${s.hallucinated_pct}%</span><span>hallucinated</span></div>
+        </div>` +
+        (judged ? `<div class="scorecard" style="grid-template-columns:repeat(2,1fr);margin-top:1px">
+          <div><span class="big">${s.judge_faithful_pct}%</span><span>judge: faithful</span></div>
+          <div><span class="big">${s.judge_citations_pct}%</span><span>judge: citations correct</span></div></div>` : "") +
+        `<table class="evaltbl"><tr><th>retr</th><th>ans</th><th>grnd</th>${judged ? "<th>faith</th>" : ""}<th>answerable question</th></tr>${rows}</table>
+        <table class="evaltbl"><tr><th>ref</th><th colspan="${judged ? 4 : 3}">refusal question</th></tr>${refRows}</table>`;
+    }
+    opRunner("op-golden", "golden-out", () => "/admin/eval/golden?judge=" + (document.getElementById("judge-on").checked ? "true" : "false"), renderGolden);
+
+    function renderChunking(out, d) {
+      const row = r => `<tr><td>${r.size ?? r.label}</td><td>${r.chunks}</td><td>${r.r1.toFixed(2)}</td>` +
+        `<td>${r.r3.toFixed(2)}</td><td>${r.r5.toFixed(2)}</td><td>${r.mrr.toFixed(3)}</td></tr>`;
+      out.innerHTML = `<table class="evaltbl"><tr><th>size</th><th>#chunks</th><th>R@1</th><th>R@3</th><th>R@5</th><th>MRR</th></tr>
+          ${d.sweep.map(row).join("")}</table>
+        <table class="evaltbl"><tr><th>strategy</th><th>#chunks</th><th>R@1</th><th>R@3</th><th>R@5</th><th>MRR</th></tr>
+          ${d.strategies.map(row).join("")}</table>`;
+    }
+    opRunner("op-chunking", "chunking-out", "/admin/eval/chunking", renderChunking);
+
+    function renderThreshold(out, d) {
+      const max = Math.max(...d.rows.map(r => r.grounded_pct || 0), 1);
+      out.innerHTML = `<p class="depl">Current threshold: <code>${d.current}</code> · ${d.n_correct_drafts} correct drafts</p>
+        <table class="evaltbl"><tr><th>threshold</th><th>grounded</th><th>%</th><th></th></tr>` +
+        d.rows.map(r => `<tr><td>${r.threshold.toFixed(2)}${Math.abs(r.threshold - d.current) < 1e-9 ? " ◀" : ""}</td>` +
+          `<td>${r.grounded_of_correct}</td><td>${r.grounded_pct}%</td>` +
+          `<td><span class="barcell" style="width:${(r.grounded_pct || 0) / max * 120}px"></span></td></tr>`).join("") + `</table>`;
+    }
+    opRunner("op-threshold", "threshold-out", "/admin/eval/threshold", renderThreshold);
+
+    function renderChunks(out, data) {
+      out.innerHTML = `<p class="depl">${data.total_docs} documents → <b>${data.total_chunks}</b> chunks.</p>` +
+        data.documents.map(dd => {
+          const chunks = dd.chunks.map((c, i) => {
+            const badges = (c.has_table ? '<span class="badge table">TABLE</span>' : "") + (c.has_list ? '<span class="badge list">LIST</span>' : "");
+            const section = c.header.split(" > ").slice(1).join(" › ") || c.header || "(no heading)";
+            return `<div class="chunk"><div class="chunk-head"><span class="idx">#${i + 1}</span>
+              <span class="hdr" title="${esc(c.header)}">${esc(section)}</span>${badges}<span class="w">${c.words}w</span></div>
+              <div class="chunk-text">${esc(c.text)}</div></div>`;
+          }).join("");
+          return `<div class="doc"><div class="doc-head"><span class="name">${esc(dd.source)}</span>
+            <span class="meta">${dd.words}w · ${dd.sections} sections</span>
+            <span class="count">${dd.chunks.length} chunks</span></div>${chunks}</div>`;
+        }).join("");
+    }
+    opRunner("op-chunks", "chunks-out", "/admin/chunks", renderChunks);
+
+    // ============ init ============
+    buildProcess(); resetSteps(); loadPoints();
+  </script>
+</body>
+</html>

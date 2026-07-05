@@ -23,12 +23,31 @@ class Settings:
     # Reranker (cross-encoder; multilingual). Refines the fused candidate list.
     rerank_model: str = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
 
-    # Vector store
-    chroma_path: str = os.getenv("CHROMA_PATH", "./chroma_db")
+    # Vector store (Qdrant). A remote http URL talks to a Qdrant server (Docker in
+    # dev). Set QDRANT_PATH instead to run Qdrant embedded on local disk — no
+    # separate service needed, which is what the single-container HF Spaces deploy
+    # uses (the index is rebuilt from data/raw on boot).
+    qdrant_url: str = os.getenv("QDRANT_URL", "http://localhost:6333")
+    qdrant_path: str = os.getenv("QDRANT_PATH", "")
     collection: str = os.getenv("COLLECTION", "ritaj")
 
     # Retrieval
     top_k: int = int(os.getenv("TOP_K", "6"))
+
+    # Operator console. When set, every /admin/* API route requires this token
+    # (X-Admin-Token or Authorization: Bearer). Empty = open, for local dev only;
+    # ALWAYS set it on a public deployment.
+    admin_token: str = os.getenv("ADMIN_TOKEN", "")
+
+    # Where runtime writers persist. On HF Spaces the app dir is read-only for
+    # the runtime user, so start.sh points these at /tmp/… there.
+    chat_log_path: str = os.getenv("CHAT_LOG_PATH", "chat_log.jsonl")
+    calibration_path: str = os.getenv("CALIBRATION_PATH", "calibration.json")
+
+    # Conversation memory bounds (per request; the server enforces these on the
+    # client-sent history so a hostile client can't blow up the prompt).
+    history_max_turns: int = int(os.getenv("HISTORY_MAX_TURNS", "8"))
+    history_max_chars: int = int(os.getenv("HISTORY_MAX_CHARS", "1500"))
 
 
 settings = Settings()
