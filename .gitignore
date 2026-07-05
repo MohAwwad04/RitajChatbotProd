@@ -18,7 +18,7 @@ dist/
 build/
 
 # ---- Generated / runtime data (rebuilt with scripts/build_index.py) ----
-chroma_db/
+qdrant_storage/
 
 # ---- Caches ----
 .pytest_cache/
@@ -41,3 +41,29 @@ htmlcov/
 .DS_Store
 **/.DS_Store
 Thumbs.db
+
+# Runtime calibration overrides written by the /admin dashboard
+calibration.json
+
+# Runtime chat interaction log (shown in /admin Log tab)
+chat_log.jsonl
+
+# ---- Local-only docs & ops notes (never push: walkthroughs, deploy IDs) ----
+explainer.html
+explainer_live.html
+PLAN.md
+PLAN_EXPLAINED.md
+process.md
+future.md
+phases/
+DEPLOYMENT.md
+CLAUDE.md
+deploy/
+
+# ---- Node ----
+node_modules/
+*.tsbuildinfo
+
+# ---- Packaged artifacts / logs ----
+ritaj-assistant-extension.zip
+*.log

@@ -2,16 +2,26 @@
 
 > ENCS5342 Course Project — NLP_Project
 
-A walking-skeleton RAG chatbot: **document → ChromaDB → Gemma 4 → cited answer**,
+A walking-skeleton RAG chatbot: **document → Qdrant → Gemma 4 → cited answer**,
 exposed over one FastAPI route. See `PLAN.md` for the full design and
 `PLAN_EXPLAINED.md` for the plain-language reasoning.
+
+**Live:** https://mohawwad04-ritaj-rag.hf.space (HF Spaces free tier + Groq —
+see `DEPLOYMENT.md`). Clients: the React student portal (served at `/`), the
+token-gated operator console (`/admin`, requires `ADMIN_TOKEN`), and a Chrome
+extension (`chrome-extension/` — load unpacked, or see its README to publish).
+
+**Conversation memory:** each client replays its prior turns (`history`) plus a
+`session_id` with every `/chat` request; the server condenses follow-ups into a
+standalone retrieval query and keeps generation context — while itself staying
+stateless.
 
 ## Stack
 
 - **LLM:** Gemma 4 (open-weight), served via **Ollama** in dev and **vLLM** in
   prod — both reached through one OpenAI-compatible client. Switch by editing
   `.env` only.
-- **Vector DB:** ChromaDB (self-hosted, on-prem).
+- **Vector DB:** Qdrant (self-hosted via Docker, on-prem).
 - **Embeddings:** `intfloat/multilingual-e5-large` (Arabic + English).
 - **API:** FastAPI.
 
@@ -38,16 +48,31 @@ exposed over one FastAPI route. See `PLAN.md` for the full design and
 ## Run
 
 ```bash
+# 0. Start the Qdrant vector DB (Docker)
+docker run -d --name qdrant -p 6333:6333 -v "$(pwd)/qdrant_storage:/qdrant/storage" qdrant/qdrant
+
 # 1. Build the index from data/raw/ (first run downloads the embedder, ~2 GB)
 python scripts/build_index.py
 
 # 2. Start the API
 uvicorn ritaj.api:app --reload --app-dir src
 
-# 3. Ask a question
+# 3. Open the UIs
+#   http://localhost:8000/        → the Ritaj student portal (chat)
+#   http://localhost:8000/admin   → operator dashboard: 3D + live pipeline view,
+#                                    and a Calibration tab (edit/save tunables,
+#                                    rebuild the index, run golden/threshold/chunking evals)
+
+# 4. …or ask via the API directly (POST /chat)
 curl -s localhost:8000/chat -H 'content-type: application/json' \
   -d '{"message": "How do I drop a course in Ritaj?"}' | python -m json.tool
 ```
+
+> **Calibration.** Tunables (retrieval breadth, chunking, grounding threshold,
+> generation knobs) default in `src/ritaj/runtime_config.py` and are overridable
+> live from `/admin` → Calibration, persisted to `calibration.json`. Changes to
+> chunk size/overlap/strategy need a rebuild (the dashboard's **Rebuild index**
+> button, or `python scripts/build_index.py`).
 
 ## Test
 
@@ -62,11 +87,11 @@ normalization~~ ✅ → structure-aware chunking → streaming + auth on the API
 the React widget → tool calling for personalized data. See `PLAN.md` sections
 7–9.
 
-Retrieval is a **funnel** — `retrieve()` runs dense (Chroma) and sparse (BM25,
+Retrieval is a **funnel** — `retrieve()` runs dense (Qdrant) and sparse (BM25,
 `bm25.py`) in parallel, fuses them with Reciprocal Rank Fusion for recall, then
 a cross-encoder reranker (`rerank.py`, `BAAI/bge-reranker-v2-m3`) reorders the
 candidates by true relevance and keeps the top `TOP_K`. The BM25 index is built
-lazily from the chunks already in Chroma, so rebuild the index and restart the
+lazily from the chunks already in Qdrant, so rebuild the index and restart the
 API to pick up new content. The reranker downloads ~600 MB on first use.
 
 Arabic text is normalized (`arabic.py`) before both embedding and BM25

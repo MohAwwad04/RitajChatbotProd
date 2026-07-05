@@ -1,0 +1,222 @@
+# Curated link map: knowledge-base doc -> the Ritaj/Birzeit page(s) it describes.
+#
+# Keyed by the doc filename that appears in chunk metadata as `source` (see
+# ingest.build_index, which sets meta["source"] = path.name). This file is NOT
+# indexed: it lives outside data/raw/ so it never affects retrieval — it is only
+# consulted AFTER an answer is generated, to attach the verified URL of a cited
+# doc deterministically (the LLM never emits links; links.py looks them up here).
+#
+# Schema, per doc:
+#   <filename>.md:
+#     - label: "Human-readable page name"
+#       url: "https://ritaj.birzeit.edu/..."   # must be a real, on-site URL
+#       path: "/..."                            # optional, the path portion
+#       verified: false                         # true ONLY for a confirmed URL
+# A doc with no usable URL maps to an empty list ([]).
+#
+# URL reality: many student pages (schedule, grades, financial account, personal
+# info, webmail) sit BEHIND the Ritaj login and have no verifiable deep link.
+# Those use a safe public fallback (the portal home, or the relevant public
+# birzeit.edu page) with verified: false and a `# TODO verify` marker. Every
+# verified: false entry is also listed in data/links_TODO.md for a human to
+# confirm. Never guess a path and mark it verified.
+
+academic_calendar_fall_2025_2026.md:
+  - label: "Academic Calendar"
+    url: "https://ritaj.birzeit.edu/academic-calendar"
+    path: "/academic-calendar"
+    verified: true
+
+admission_and_registration.md:
+  - label: "Admission & Registration"
+    url: "https://www.birzeit.edu/en/admissions"
+    path: "/en/admissions"
+    verified: true
+  - label: "Admission Process (new students)"
+    url: "https://www.birzeit.edu/en/admissions/new-students-admission/admission-process"
+    path: "/en/admissions/new-students-admission/admission-process"
+    verified: true
+  - label: "Register for a bachelor's program"
+    url: "https://www.birzeit.edu/en/admissions/new-students-admission/registration-bachelors-program"
+    path: "/en/admissions/new-students-admission/registration-bachelors-program"
+    verified: false  # TODO verify — found via search index, not directly confirmed
+
+course_registration.md:
+  - label: "Ritaj — Course Registration"
+    url: "https://ritaj.birzeit.edu/reg/"
+    path: "/reg/"
+    verified: true  # confirmed registration page (login-gated)
+
+english_placement_and_language.md:
+  - label: "Admission Process (English level test)"
+    url: "https://www.birzeit.edu/en/admissions/new-students-admission/admission-process"
+    path: "/en/admissions/new-students-admission/admission-process"
+    verified: true
+  - label: "English Language Instruction Program"
+    url: "https://www.birzeit.edu/en/students/english-language-instruction-program-unlock"
+    path: "/en/students/english-language-instruction-program-unlock"
+    verified: false  # TODO verify — cited in source doc, not independently confirmed
+
+grading_and_gpa.md:
+  # No public GPA page; grades/record are on the login-gated Ritaj portal.
+  - label: "Ritaj Portal (grades & record)"
+    url: "https://ritaj.birzeit.edu/"
+    path: "/"
+    verified: true  # portal home (safe landing); the record module is login-gated
+
+ritaj_portal_and_it.md:
+  - label: "Ritaj Portal"
+    url: "https://ritaj.birzeit.edu/"
+    path: "/"
+    verified: true
+  - label: "IT Services"
+    url: "https://www.birzeit.edu/en/it-services"
+    path: "/en/it-services"
+    verified: true
+
+sample_registration_guide.md:
+  - label: "Ritaj Portal (registration)"
+    url: "https://ritaj.birzeit.edu/"
+    path: "/"
+    verified: true  # portal home; the add/drop module is login-gated
+
+tuition_and_fees.md:
+  - label: "Tuition Fees"
+    url: "https://www.birzeit.edu/en/admissions/tuition-fees-0"
+    path: "/en/admissions/tuition-fees-0"
+    verified: true
+
+ritaj_schedule_and_records.md:
+  - label: "Ritaj Portal (schedule & records)"
+    url: "https://ritaj.birzeit.edu/"
+    path: "/"
+    verified: true  # portal home; schedule/grades views are login-gated
+  # NOTE: the "certificates & documents" link was removed here — this doc is
+  # mostly schedule/exams/grades, so that link leaked onto calendar/schedule
+  # questions where it's irrelevant. It belongs on transcript/document content.
+
+financial_account_and_payment.md:
+  - label: "Tuition Fees"
+    url: "https://www.birzeit.edu/en/admissions/tuition-fees-0"
+    path: "/en/admissions/tuition-fees-0"
+    verified: true
+  - label: "Ritaj Portal (financial account)"
+    url: "https://ritaj.birzeit.edu/"
+    path: "/"
+    verified: true  # portal home; the financial account is login-gated
+
+course_catalog_and_programs.md:
+  - label: "Academic Programs"
+    url: "https://www.birzeit.edu/en/study/programs"
+    path: "/en/study/programs"
+    verified: true
+  - label: "Academic Departments A-Z"
+    url: "https://www.birzeit.edu/en/study/academic-departments"
+    path: "/en/study/academic-departments"
+    verified: false  # TODO verify — found via search index, not directly confirmed
+
+webmail_and_student_email.md:
+  - label: "IT Services"
+    url: "https://www.birzeit.edu/en/it-services"
+    path: "/en/it-services"
+    verified: true
+  - label: "Ritaj Portal (email link)"
+    url: "https://ritaj.birzeit.edu/"
+    path: "/"
+    verified: true  # portal home; webmail deep link is login-gated
+
+password_and_account_security.md:
+  - label: "IT Services"
+    url: "https://www.birzeit.edu/en/it-services"
+    path: "/en/it-services"
+    verified: true
+  - label: "Ritaj Portal"
+    url: "https://ritaj.birzeit.edu/"
+    path: "/"
+    verified: true
+
+library_services.md:
+  - label: "BZU Library"
+    url: "https://www.birzeit.edu/en/study/bzu-library"
+    path: "/en/study/bzu-library"
+    verified: false  # TODO verify — found via search index, not directly confirmed
+  - label: "Main Library"
+    url: "https://www.birzeit.edu/en/content/main-library"
+    path: "/en/content/main-library"
+    verified: false  # TODO verify — found via search index, not directly confirmed
+  - label: "Library Catalog (Koha)"
+    url: "https://koha.birzeit.edu/"
+    path: "/"
+    verified: false  # TODO verify — found via search index, not directly confirmed
+
+graduation_and_advising.md:
+  - label: "Ritaj Portal (academic record)"
+    url: "https://ritaj.birzeit.edu/"
+    path: "/"
+    verified: true  # portal home; the record/graduation view is login-gated
+  - label: "Admission & Registration"
+    url: "https://www.birzeit.edu/en/admissions"
+    path: "/en/admissions"
+    verified: true
+
+ritaj_announcements_and_personal_info.md:
+  - label: "Ritaj Portal"
+    url: "https://ritaj.birzeit.edu/"
+    path: "/"
+    verified: true  # portal home; messages/personal-info views are login-gated
+
+about_birzeit_university.md:
+  - label: "Birzeit University"
+    url: "https://www.birzeit.edu/en/"
+    path: "/en/"
+    verified: true
+  - label: "About Birzeit University"
+    url: "https://www.birzeit.edu/en/about"
+    path: "/en/about"
+    verified: false  # TODO verify — found via search index, not directly confirmed
+
+faculties_and_degree_programs.md:
+  - label: "Faculties"
+    url: "https://www.birzeit.edu/en/study/faculties"
+    path: "/en/study/faculties"
+    verified: false  # TODO verify — found via search index, not directly confirmed
+  - label: "Academic Programs"
+    url: "https://www.birzeit.edu/en/study/programs"
+    path: "/en/study/programs"
+    verified: true
+
+contact_campus_and_transport.md:
+  - label: "Contact Birzeit University"
+    url: "https://www.birzeit.edu/en/contact"
+    path: "/en/contact"
+    verified: false  # TODO verify — found via search index, not directly confirmed
+  - label: "Campus"
+    url: "https://www.birzeit.edu/en/about/campus"
+    path: "/en/about/campus"
+    verified: false  # TODO verify — found via search index, not directly confirmed
+
+scholarships_and_financial_aid.md:
+  - label: "Financial Aid"
+    url: "https://www.birzeit.edu/en/admissions/undergraduate/finanical-aid"
+    path: "/en/admissions/undergraduate/finanical-aid"
+    verified: false  # TODO verify — real site path (typo included) per search index
+  - label: "Ritaj Portal (financial aid application)"
+    url: "https://ritaj.birzeit.edu/"
+    path: "/"
+    verified: true  # portal home; the aid application is login-gated
+
+admission_how_to_apply.md:
+  - label: "Admission & Registration"
+    url: "https://www.birzeit.edu/en/admissions"
+    path: "/en/admissions"
+    verified: true
+  - label: "Admission Requirements"
+    url: "https://www.birzeit.edu/en/admissions/new-students-admission/admission-requirments"
+    path: "/en/admissions/new-students-admission/admission-requirments"
+    verified: false  # TODO verify — real site path (typo included) per search index
+
+student_life_and_affairs.md:
+  - label: "Student Affairs"
+    url: "https://www.birzeit.edu/en/students/affairs"
+    path: "/en/students/affairs"
+    verified: false  # TODO verify — found via search index, not directly confirmed

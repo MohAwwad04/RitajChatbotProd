@@ -1,0 +1,40 @@
+# Railway upload ignore list. When present, this takes precedence over
+# .gitignore for `railway up`, so the (git-ignored) built portal in
+# ritaj-student-portal/dist still ships in the build context.
+
+.git/
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Secrets — never ship these into the build context (set as Railway variables)
+.env
+.env.local
+
+# Local-only runtime data (rebuilt on the server)
+qdrant_storage/
+chat_log.jsonl
+calibration.json
+
+# Frontend sources we don't need (we ship the prebuilt dist instead)
+ritaj-student-portal/node_modules/
+ritaj-student-portal/src/
+ritaj-student-portal/public/
+
+# Tooling / OS junk / docs not needed at runtime
+.claude/
+.github/
+.DS_Store
+**/.DS_Store
+*.swp
+explainer.html
+phases/
+tests/

@@ -15,7 +15,7 @@ These are the building blocks of the RAG pipeline. Each maps to a stage in `PLAN
 
 | Package | Version | What it is | Why we use it (goal in this project) |
 |---------|---------|-----------|--------------------------------------|
-| **chromadb** | 1.5.9 | Open-source vector database | Stores document chunks as embeddings and finds the most relevant ones for a question. The "memory" / retrieval store (PLAN §5). Self-hosted so data stays on-prem. |
+| **qdrant-client** | ≥1.7 | Python client for the Qdrant vector database | Stores document chunks as embeddings and finds the most relevant ones for a question. The "memory" / retrieval store (PLAN §5). Qdrant runs as a self-hosted Docker container so data stays on-prem. |
 | **sentence-transformers** | 5.5.1 | Library for text embedding models | Runs the multilingual embedder (`multilingual-e5-large`) that turns Arabic/English text into meaning-vectors for search (PLAN §5, §10). |
 | **fastapi** | 0.137.1 | Modern Python web framework | Exposes the assistant over HTTP — the `/chat` orchestrator endpoint the frontend/widget calls (PLAN §4). |
 | **uvicorn** | 0.49.0 | ASGI web server | Actually runs the FastAPI app (`uvicorn ritaj.api:app`). The process that serves requests. |
@@ -42,15 +42,15 @@ Grouped by which direct dependency brought them in and what role they play.
 | **scikit-learn** (1.9.0), **scipy** (1.17.1), **numpy** (2.4.6) | Numerical / vector math underneath embeddings and similarity. |
 | **sympy** (1.14.0), **mpmath** (1.3.0), **networkx** (3.6.1), **filelock**, **fsspec**, **joblib**, **threadpoolctl**, **regex** | Math, graph, file, and caching utilities torch/transformers depend on. |
 
-### Vector DB internals (via `chromadb`)
+### Vector DB client (via `qdrant-client`)
 | Package | Role |
 |---------|------|
-| **onnxruntime** (1.27.0) | Runs Chroma's built-in models efficiently. |
-| **grpcio** (1.81.1), **protobuf** (6.33.6), **googleapis-common-protos** | Internal communication / data serialization for Chroma. |
-| **opentelemetry-*** (api, sdk, exporters) | Tracing/telemetry hooks — aligns with the observability goal (PLAN §15). |
-| **kubernetes** (36.0.2) | Client Chroma uses for clustered/server deployments. |
-| **pypika** (0.51.1) | Builds SQL queries for Chroma's metadata store. |
-| **mmh3**, **pybase64**, **bcrypt**, **overrides**, **durationpy**, **tenacity** | Hashing, encoding, auth, and retry helpers. |
+| **grpcio**, **protobuf** | Fast gRPC transport to the Qdrant server (it also speaks REST over httpx). |
+| **portalocker** | File locking used by the client's local/in-memory mode (the eval harness uses pure numpy instead, so no server needed there). |
+
+> Note: Qdrant itself runs as a **Docker container** (`qdrant/qdrant`), not a pip
+> package — so the heavy vector-DB engine lives outside the Python env. This is a
+> much lighter client footprint than the previous embedded ChromaDB.
 
 ### Web stack (via `fastapi` / `uvicorn`)
 | Package | Role |
