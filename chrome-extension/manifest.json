@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Ritaj Assistant — Birzeit University",
+  "short_name": "Ritaj Assistant",
+  "version": "1.0.0",
+  "description": "Ask anything about Birzeit University and the Ritaj portal — registration, fees, grades, deadlines, IT help — in Arabic or English.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Ritaj Assistant",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": ["storage"],
+  "host_permissions": ["https://mohawwad04-ritaj-rag.hf.space/*"]
+}
