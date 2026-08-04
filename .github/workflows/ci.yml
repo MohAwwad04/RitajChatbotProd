@@ -1,36 +1,182 @@
 name: CI
 
-# Regression gate (PLAN §13). Runs the model-free smoke tests on every push and
-# pull request — the cheap quality gate that needs no GPU, no LLM, and no network
-# model downloads. The full golden-set eval (one LLM call per case) is too heavy
-# for CI; run it locally with `python scripts/eval_golden.py` before a release.
+# The release gate (roadmap Phase 9.2). Everything here is model-free and
+# network-free so it runs on every pull request in a couple of minutes — a gate
+# that takes twenty minutes gets bypassed, and a bypassed gate is not a gate.
+# The heavy evaluation (one LLM call per case) runs before a release, not on
+# every push.
 
 on:
   push:
-    branches: [main]
+    branches: [main, release]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  smoke:
+  backend:
+    name: Backend tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
 
       - name: Install dependencies
         # CPU-only torch keeps the install light (sentence-transformers pulls it
-        # in, but the smoke tests never actually load a model).
+        # in, but nothing here loads a model).
         env:
           PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Run model-free smoke tests
+      - name: Unit + integration tests
+        env:
+          STARTUP_INIT: "0"
+          ENVIRONMENT: development
         run: pytest -q
+
+  policy:
+    name: Corpus, navigation, privacy and extension policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        env:
+          PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # Every indexed record traces to an approved ritaj.birzeit.edu URL, and no
+      # indexable file has appeared outside the manifest's control.
+      - name: Corpus source policy
+        run: python scripts/check_corpus_policy.py
+
+      # Destinations are reviewed Ritaj URLs; 18 known URL attacks are rejected.
+      - name: Navigation registry
+        run: python scripts/check_navigation.py
+
+      # Minimal permissions, and navigation.js's allowlist matches the registry.
+      - name: Extension manifest and allowlist
+        run: python scripts/check_extension.py
+
+      # The privacy documents match the manifest, the portal and the prompt.
+      - name: Privacy disclosures
+        run: python scripts/check_privacy.py
+
+      # Scope refusals, injection redaction and URL rejection: model-free and
+      # blocking, because these are safety properties, not coverage targets.
+      - name: Model-free release checks
+        run: python scripts/eval_release.py
+
+      # Advisory until an approved corpus exists: the answerable/calendar/
+      # navigation categories cannot be written against a corpus that does not
+      # exist, and blocking every PR on that helps nobody. Flip to blocking (drop
+      # continue-on-error) as part of the release checklist.
+      - name: Release-set completeness (advisory)
+        continue-on-error: true
+        run: python scripts/eval_release.py --gate
+
+  security:
+    name: Secrets and dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        env:
+          PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" pip-audit
+
+      - name: Committed-secret scan
+        run: python scripts/secret_inventory.py --scan-only
+
+      - name: Software bill of materials
+        run: python scripts/sbom.py
+
+      # Advisory: a new CVE in a transitive dependency should be visible on
+      # whichever PR happens to run next, but it is not that author's fault and
+      # must not block their merge.
+      - name: Dependency audit (advisory)
+        continue-on-error: true
+        run: pip-audit --strict --desc
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: release/sbom.json
+
+  frontend:
+    name: Portal build and extension tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ritaj-student-portal/package-lock.json
+
+      - name: Install portal dependencies
+        working-directory: ritaj-student-portal
+        run: npm ci
+
+      # tsc runs as part of the build, so a type error fails here.
+      - name: Build portal
+        working-directory: ritaj-student-portal
+        run: npm run build
+
+      # The client-side destination validator is a deliberate second
+      # implementation of the URL policy, so it carries its own tests.
+      - name: Extension validator tests
+        run: node --test chrome-extension/navigation.test.mjs
+
+  container:
+    name: Container build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The image bakes ~2 GB of model weights, so it is built on pushes to the
+    # long-lived branches rather than on every pull request.
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t ritaj-assistant:ci .
+
+      - name: Container binds the port before it is ready
+        # This is the regression test for the outage: /live must answer long
+        # before initialization finishes. If this step ever needs a longer wait,
+        # something has moved back in front of the port bind.
+        run: |
+          docker run -d --name ritaj-ci -p 7860:7860 \
+            -e ALLOW_INDEX_BUILD_ON_BOOT=0 \
+            -e ENVIRONMENT=development \
+            ritaj-assistant:ci
+          for _ in $(seq 1 30); do
+            if curl -fsS http://localhost:7860/live >/dev/null; then break; fi
+            sleep 2
+          done
+          echo "live:"  && curl -fsS http://localhost:7860/live
+          echo "ready:" && curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:7860/ready
+          docker logs ritaj-ci | tail -30
+          docker rm -f ritaj-ci

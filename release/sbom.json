@@ -3,7 +3,7 @@
   "specVersion": "1.5",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-08-04T16:35:27+00:00",
+    "timestamp": "2026-08-04T16:41:24+00:00",
     "component": {
       "type": "application",
       "name": "ritaj-assistant"
@@ -2104,12 +2104,12 @@
     {
       "type": "machine-learning-model",
       "name": "intfloat/multilingual-e5-large",
-      "version": "unpinned (latest revision on the hub at build time)"
+      "version": "3d7cfbdacd47fdda877c5cd8a79fbcc4f2a574f3"
     },
     {
       "type": "machine-learning-model",
       "name": "BAAI/bge-reranker-v2-m3",
-      "version": "unpinned (latest revision on the hub at build time)"
+      "version": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
     },
     {
       "type": "container",

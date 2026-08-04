@@ -238,7 +238,8 @@ def test_v2_accepts_the_documented_request_shape(monkeypatch):
     ("my ID is 1191234", "1191234"),
     ("email a.student@student.birzeit.edu", "a.student@student.birzeit.edu"),
     ("call +970-2-2982057", "2982057"),
-    ("token hf_abcdefghijklmnopqrstuvwxyz012345", "hf_abcdefghijklmnopqrstuvwxyz012345"),
+    # Fabricated, never issued. secret-scan: allow
+    ("token hf_abcdefghijklmnopqrstuvwxyz012345", "hf_abcdefghijklmnopqrstuvwxyz012345"),  # secret-scan: allow
     ("password: hunter2000", "hunter2000"),
 ])
 def test_redaction_removes_identifiers(raw, gone):

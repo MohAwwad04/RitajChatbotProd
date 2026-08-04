@@ -76,6 +76,11 @@ SCAN_SKIP = re.compile(
     r"|scripts/secret_inventory\.py|docs/SECURITY_THREAT_MODEL\.md)$"
 )
 
+# A line-level escape hatch, because code that *tests* secret redaction has to
+# contain secret-shaped strings. Deliberately per-line rather than per-file: a
+# whole file exempted today is a whole file nobody scans in a year.
+ALLOW_PRAGMA = "secret-scan: allow"
+
 
 def fingerprint(value: str) -> str:
     """Stable 8-hex-char identity for a secret, revealing nothing about it."""
@@ -128,11 +133,14 @@ def scan() -> int:
         checks = list(PATTERNS)
         if path.suffix.lower() in DOC_SUFFIXES:
             checks += DOC_PATTERNS
+        lines = text.splitlines()
         for label, pattern in checks:
             for m in pattern.finditer(text):
-                line = text[: m.start()].count("\n") + 1
+                line_no = text[: m.start()].count("\n") + 1
+                if ALLOW_PRAGMA in lines[line_no - 1]:
+                    continue
                 # Report the location and the kind, never the matched value.
-                print(f"  {rel}:{line}: possible {label}")
+                print(f"  {rel}:{line_no}: possible {label}")
                 hits += 1
     if hits:
         print(f"\n{hits} potential secret(s) in tracked files — review and rotate.")

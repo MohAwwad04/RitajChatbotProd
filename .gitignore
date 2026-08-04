@@ -73,3 +73,12 @@ node_modules/
 # ---- Packaged artifacts / logs ----
 ritaj-assistant-extension.zip
 *.log
+
+# Generated per-release: the manifest and SBOM are written into the deployed
+# tree by scripts/deploy_space.py, and regenerated from the tag on demand.
+# Committing them would mean a stale copy is what a reviewer reads.
+release/
+
+# Built corpus artifacts. data/corpus/CURRENT and the artifact directories are
+# build outputs; the manifest that produces them (data/sources.yaml) is tracked.
+data/corpus/
