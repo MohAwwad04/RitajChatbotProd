@@ -1,6 +1,12 @@
 # ---- Secrets / local config ----
 .env
 .env.local
+# Plaintext operator credentials. Never commit: /admin accounts are configured
+# from bcrypt hashes in ADMIN_USERS (see scripts/set_admins.py), so the cleartext
+# list has no reason to exist in the repo.
+ritaj_rag_admins.rtf
+*_admins.rtf
+secrets/
 
 # ---- Python virtual environments ----
 .venv/

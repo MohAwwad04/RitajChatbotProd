@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Privacy Policy — Ritaj Assistant</title>
+<style>
+  :root { --brand: #b91c1c; --ink: #1c2333; --muted: #6b7280; --border: #e3e7f0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+    color: var(--ink); background: #f4f6fb; line-height: 1.65;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 40px 20px 80px; }
+  header.page { border-bottom: 3px solid var(--brand); padding-bottom: 16px; margin-bottom: 28px; }
+  h1 { font-size: 1.6rem; }
+  h1 small { display: block; font-size: 0.95rem; color: var(--muted); font-weight: 400; margin-top: 4px; }
+  h2 { font-size: 1.15rem; margin: 28px 0 8px; color: var(--brand); }
+  p, li { margin-bottom: 8px; }
+  ul { padding-inline-start: 22px; }
+  .card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 24px 28px; margin-bottom: 24px; }
+  .lang-note { font-size: 0.9rem; color: var(--muted); margin-bottom: 20px; }
+  a { color: var(--brand); }
+  [dir="rtl"] h2 { text-align: right; }
+</style>
+</head>
+<body>
+<main>
+  <header class="page">
+    <h1>Privacy Policy — Ritaj Assistant
+      <small>Chrome extension &amp; web chatbot for Birzeit University student services · Effective 6 July 2026</small>
+    </h1>
+  </header>
+  <p class="lang-note">English first; <a href="#ar">العربية أدناه</a>.</p>
+
+  <div class="card" lang="en" dir="ltr">
+    <h2>What the assistant is</h2>
+    <p>Ritaj Assistant answers questions about Birzeit University and the Ritaj
+    portal (registration, fees, grades, deadlines, IT help) in Arabic or English.
+    It is an independent student project and is not an official Birzeit University
+    product. It requires no account and no sign-in.</p>
+
+    <h2>What is sent to our server</h2>
+    <p>When you send a message, the extension (or the web portal) transmits to our
+    backend at <code>mohawwad04-ritaj-rag.hf.space</code>:</p>
+    <ul>
+      <li>the question you typed;</li>
+      <li>the recent turns of the current conversation, so follow-up questions make sense;</li>
+      <li>a random session identifier (a UUID generated locally — it identifies the
+          conversation, not you) and a client tag ("extension" or "portal").</li>
+    </ul>
+    <p>Nothing else is collected: no name, no email, no student ID, no browsing
+    history, no page content, no location, no cookies, no advertising or analytics
+    trackers.</p>
+
+    <h2>How your message is processed</h2>
+    <p>The server searches a knowledge base of public Birzeit University
+    information and sends your question plus the retrieved passages to a
+    third-party language-model provider, <a href="https://groq.com">Groq</a>, to
+    compose the answer text. Groq receives only the conversation content — never
+    any identifier of you or your device beyond what any internet request carries.</p>
+
+    <h2>Logging and retention</h2>
+    <p>Questions and answers (with their random session id) may be logged on the
+    server so we can monitor answer quality. These logs live in temporary storage
+    that is erased whenever the server restarts or is rebuilt; they are not backed
+    up, shared, or used for anything except improving the assistant. Please do not
+    type passwords or personal information into the chat.</p>
+
+    <h2>What stays on your device</h2>
+    <p>Your chat history and language preference are stored locally with
+    <code>chrome.storage.local</code> so the conversation survives closing the
+    popup. They never leave your browser except as the "recent turns" described
+    above. Press ↺ (new chat) to erase the conversation, or uninstall the
+    extension to remove everything.</p>
+
+    <h2>What we don't do</h2>
+    <ul>
+      <li>We do not sell, rent, or share your data with anyone.</li>
+      <li>We do not use your data for advertising, profiling, or creditworthiness.</li>
+      <li>The extension loads no remote code (Manifest V3 compliant) and talks to
+          exactly one host: our own backend.</li>
+    </ul>
+
+    <h2>Changes and contact</h2>
+    <p>If this policy changes, the update will be posted at this address with a new
+    effective date. Questions: <a href="mailto:moh.awwad243@gmail.com">moh.awwad243@gmail.com</a>.</p>
+  </div>
+
+  <div class="card" lang="ar" dir="rtl" id="ar">
+    <h2>ما هو المساعد</h2>
+    <p>مساعد ريتاج يجيب عن الأسئلة حول جامعة بيرزيت وبوابة ريتاج (التسجيل، الرسوم،
+    العلامات، المواعيد، الدعم الفني) بالعربية أو الإنجليزية. وهو مشروع طلابي مستقل
+    وليس منتجاً رسمياً لجامعة بيرزيت، ولا يتطلب أي حساب أو تسجيل دخول.</p>
+
+    <h2>ما الذي يُرسل إلى خادمنا</h2>
+    <p>عند إرسال رسالة، يرسل الامتداد (أو البوابة) إلى خادمنا على
+    <code>mohawwad04-ritaj-rag.hf.space</code>:</p>
+    <ul>
+      <li>السؤال الذي كتبته؛</li>
+      <li>الرسائل الأخيرة من المحادثة الحالية كي تُفهم أسئلة المتابعة؛</li>
+      <li>معرّف جلسة عشوائي (يُنشأ محلياً ويعرّف المحادثة لا شخصك) ووسم العميل.</li>
+    </ul>
+    <p>لا يُجمع أي شيء آخر: لا اسم، لا بريد إلكتروني، لا رقم جامعي، لا سجل تصفح،
+    لا محتوى صفحات، لا موقع جغرافي، لا ملفات تعريف ارتباط، ولا أدوات تتبع إعلانية
+    أو تحليلية.</p>
+
+    <h2>كيف تُعالج رسالتك</h2>
+    <p>يبحث الخادم في قاعدة معرفية من معلومات جامعة بيرزيت العامة، ثم يرسل سؤالك
+    مع المقاطع المسترجعة إلى مزوّد نماذج لغوية خارجي هو
+    <a href="https://groq.com">Groq</a> لصياغة نص الإجابة. لا يتلقى Groq سوى محتوى
+    المحادثة — دون أي معرّف لك أو لجهازك.</p>
+
+    <h2>السجلات ومدة الاحتفاظ</h2>
+    <p>قد تُسجَّل الأسئلة والإجابات (مع معرّف الجلسة العشوائي) على الخادم لمراقبة
+    جودة الإجابات. تُحفظ هذه السجلات في تخزين مؤقت يُمسح عند كل إعادة تشغيل أو
+    إعادة بناء للخادم، ولا تُنسخ احتياطياً ولا تُشارك ولا تُستخدم إلا لتحسين
+    المساعد. الرجاء عدم كتابة كلمات سر أو معلومات شخصية في المحادثة.</p>
+
+    <h2>ما يبقى على جهازك</h2>
+    <p>يُخزَّن سجل المحادثة وتفضيل اللغة محلياً عبر <code>chrome.storage.local</code>
+    كي تبقى المحادثة بعد إغلاق النافذة، ولا يغادران متصفحك إلا ضمن «الرسائل
+    الأخيرة» المذكورة أعلاه. اضغط ↺ (محادثة جديدة) لمسح المحادثة، أو أزل الامتداد
+    لحذف كل شيء.</p>
+
+    <h2>ما لا نفعله</h2>
+    <ul>
+      <li>لا نبيع بياناتك ولا نؤجرها ولا نشاركها مع أي جهة.</li>
+      <li>لا نستخدم بياناتك للإعلانات أو التنميط أو تقييم الجدارة الائتمانية.</li>
+      <li>لا يحمّل الامتداد أي شيفرة عن بُعد (متوافق مع Manifest V3) ويتصل بمضيف
+          واحد فقط: خادمنا.</li>
+    </ul>
+
+    <h2>التغييرات والتواصل</h2>
+    <p>إذا تغيّرت هذه السياسة فسيُنشر التحديث على هذا العنوان مع تاريخ سريان جديد.
+    للاستفسارات: <a href="mailto:moh.awwad243@gmail.com">moh.awwad243@gmail.com</a>.</p>
+  </div>
+</main>
+</body>
+</html>

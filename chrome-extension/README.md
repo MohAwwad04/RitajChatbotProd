@@ -17,17 +17,15 @@ A Manifest V3 popup chat that talks to the hosted Ritaj RAG backend
 3. Pin "Ritaj Assistant" and click its icon.
 
 ## Publish to the Chrome Web Store
-1. Zip the folder contents (not the parent folder):
-   `cd chrome-extension && zip -r ../ritaj-assistant.zip . -x '*.DS_Store' 'icons/icon.svg' 'README.md'`
-2. Create a developer account at https://chrome.google.com/webstore/devconsole
-   (one-time $5 registration fee — the only non-free part of the whole stack).
-3. New item → upload the zip → fill the listing (screenshots of the popup,
-   category "Education", both `ar` and `en` descriptions recommended).
-4. Privacy tab: declare that the extension sends the user's typed question to
-   the project's own backend for answering, stores no personal data beyond the
-   local chat history, and uses no remote code. Justify `storage`
-   (keep chat history) and the single host permission (the backend API).
-5. Submit for review (usually 1–3 days for a popup-only extension).
+Everything is prepared in **`store/SUBMISSION.md`** — the upload zip
+(`../ritaj-assistant-extension.zip`), 1280×800 screenshots + promo tile
+(`store/assets/`), bilingual listing copy, permission justifications,
+data-usage answers, and a live privacy-policy URL. Follow it top to bottom;
+the only inputs it can't provide are your Google account and the one-time $5
+developer fee.
+
+To rebuild the zip after a code change (bump `version` in the manifest first):
+`cd chrome-extension && zip -r ../ritaj-assistant-extension.zip . -x '*.DS_Store' 'icons/icon.svg' 'README.md' 'store/*'`
 
 ## Moving to a custom domain later
 Change `BASE_URL` in `config.js` **and** `host_permissions` in

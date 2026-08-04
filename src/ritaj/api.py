@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import about, chatlog, citations, evaluation, generate, grounding, guardrails, ingest, links, runtime_config, viz
+from . import about, adminauth, chatlog, citations, evaluation, generate, grounding, guardrails, ingest, links, runtime_config, viz
 from .config import settings
 from .generate import answer, answer_stream, repair
 from .retrieve import retrieve, trace
@@ -38,25 +38,69 @@ app.add_middleware(
 )
 
 
-def require_admin(request: Request) -> None:
-    """Gate for every /admin/* API route.
-
-    When ADMIN_TOKEN is set (any public deployment), the caller must present it
-    as `X-Admin-Token: <token>` or `Authorization: Bearer <token>`. An empty
-    ADMIN_TOKEN leaves the console open — local development only.
-    """
-    token = settings.admin_token
-    if not token:
-        return
+def _supplied_token(request: Request) -> str:
+    """Pull the admin credential from `X-Admin-Token` or `Authorization: Bearer`."""
     supplied = request.headers.get("x-admin-token", "")
     auth = request.headers.get("authorization", "")
     if not supplied and auth.lower().startswith("bearer "):
         supplied = auth[7:]
-    if not _secrets.compare_digest(supplied, token):
+    return supplied
+
+
+def require_admin(request: Request) -> None:
+    """Gate for every /admin/* API route.
+
+    Three modes, in priority order:
+      1. ADMIN_USERS set → per-user login: the caller must present a valid
+         session token (from POST /admin/login) as `X-Admin-Token` or Bearer.
+      2. else ADMIN_TOKEN set → legacy single shared token.
+      3. else open — local development only.
+    """
+    if adminauth.load_users():
+        if adminauth.verify_session(_supplied_token(request)):
+            return
+        raise HTTPException(status_code=401, detail="admin login required")
+
+    token = settings.admin_token
+    if not token:
+        return
+    if not _secrets.compare_digest(_supplied_token(request), token):
         raise HTTPException(status_code=401, detail="admin token required")
 
 
 _ADMIN = [Depends(require_admin)]
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/admin/login", include_in_schema=False)
+def admin_login(req: LoginRequest, request: Request):
+    """Exchange username + password for a signed session token.
+
+    Not gated by `require_admin` (it is how you obtain the credential). Only
+    active when ADMIN_USERS is configured; rate-limited per (IP, username).
+    """
+    if not adminauth.load_users():
+        raise HTTPException(status_code=404, detail="login disabled (no accounts configured)")
+    ip = request.client.host if request.client else "?"
+    key = f"{ip}:{req.username}"
+    if adminauth.rate_limited(key):
+        raise HTTPException(status_code=429, detail="too many attempts — wait a few minutes")
+    if not adminauth.authenticate(req.username.strip(), req.password):
+        adminauth.record_fail(key)
+        raise HTTPException(status_code=401, detail="invalid username or password")
+    adminauth.clear_fails(key)
+    token, exp = adminauth.issue_session(req.username.strip())
+    return {"token": token, "username": req.username.strip(), "expires_at": exp}
+
+
+@app.get("/admin/me", include_in_schema=False, dependencies=_ADMIN)
+def admin_me(request: Request):
+    """Who am I — used by the console to confirm a session is still valid."""
+    return {"username": adminauth.verify_session(_supplied_token(request)) or ""}
 
 _STATIC = Path(__file__).parent / "static"
 # The student-facing React SPA (built with `npm run build`). Its assets are
@@ -109,6 +153,13 @@ def portal_page():
 @app.get("/favicon.svg", include_in_schema=False)
 def favicon():
     return FileResponse(_PORTAL / "favicon.svg")
+
+
+@app.get("/privacy", include_in_schema=False)
+def privacy_page():
+    """Privacy policy for the chatbot clients (the Chrome Web Store requires a
+    public URL for it; the extension listing points here)."""
+    return FileResponse(_STATIC / "privacy.html")
 
 
 @app.get("/health")

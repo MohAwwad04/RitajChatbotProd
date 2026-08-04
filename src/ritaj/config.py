@@ -34,9 +34,22 @@ class Settings:
     # Retrieval
     top_k: int = int(os.getenv("TOP_K", "6"))
 
-    # Operator console. When set, every /admin/* API route requires this token
-    # (X-Admin-Token or Authorization: Bearer). Empty = open, for local dev only;
-    # ALWAYS set it on a public deployment.
+    # Operator console — per-user login (preferred). "username:bcrypt_hash"
+    # pairs, comma/newline-separated (hashes ONLY, never plaintext). Generate
+    # with `python -m ritaj.adminauth hash <username>`. When set, every /admin/*
+    # route requires a session token obtained from POST /admin/login, and this
+    # takes precedence over the legacy ADMIN_TOKEN below.
+    admin_users: str = os.getenv("ADMIN_USERS", "")
+    # HMAC key that signs admin session tokens. Set a long random value in prod
+    # (e.g. `python -c "import secrets;print(secrets.token_urlsafe(48))"`) so
+    # sessions survive restarts; if empty, a random per-process key is used and
+    # everyone is logged out on restart.
+    session_secret: str = os.getenv("SESSION_SECRET", "")
+    session_ttl_hours: int = int(os.getenv("SESSION_TTL_HOURS", "12"))
+
+    # Legacy single shared token (fallback used only when ADMIN_USERS is empty).
+    # When set, every /admin/* API route requires it (X-Admin-Token or
+    # Authorization: Bearer). Empty = open, for local dev only.
     admin_token: str = os.getenv("ADMIN_TOKEN", "")
 
     # Where runtime writers persist. On HF Spaces the app dir is read-only for

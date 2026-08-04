@@ -71,10 +71,10 @@ def main() -> None:
             else:
                 shutil.copy2(src, dst)
 
+        message = sys.argv[1] if len(sys.argv) > 1 else "deploy: sync working tree"
         print(f"Uploading to {SPACE_ID} (triggers a rebuild)…")
         upload_folder(repo_id=SPACE_ID, repo_type="space", folder_path=str(stage),
-                      token=token, commit_message="deploy: conversation memory, "
-                      "admin auth, CORS, expanded Birzeit knowledge base")
+                      token=token, commit_message=message)
     print("Done. Watch the build at https://huggingface.co/spaces/" + SPACE_ID)
 
 

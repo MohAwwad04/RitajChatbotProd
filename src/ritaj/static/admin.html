@@ -33,7 +33,7 @@
       border-radius: 8px; padding: 6px 14px; font-size: 13px; cursor: pointer; font-weight: 600;
     }
     .tab.active { color: #0d1117; background: var(--accent); border-color: var(--accent); }
-    input[type=text], input[type=number], select {
+    input[type=text], input[type=number], input[type=password], select {
       background: var(--panel); border: 1px solid var(--border); color: var(--text);
       border-radius: 8px; padding: 9px 12px; font-size: 14px; outline: none;
     }
@@ -43,6 +43,25 @@
       padding: 9px 16px; font-weight: 600; cursor: pointer;
     }
     button.ghost { background: var(--panel); color: var(--text); border: 1px solid var(--border); }
+
+    /* Login overlay */
+    #login-overlay {
+      display: none; position: fixed; inset: 0; z-index: 1000;
+      background: rgba(1, 4, 9, 0.86); backdrop-filter: blur(3px);
+      align-items: center; justify-content: center;
+    }
+    #login-overlay.show { display: flex; }
+    #login-form {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+      padding: 28px 30px; width: 320px; max-width: 90vw;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column;
+    }
+    #login-form h2 { margin: 0 0 4px; font-size: 18px; }
+    .login-sub { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
+    #login-form label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+    #login-form input { width: 100%; }
+    #login-submit { margin-top: 4px; }
+    #login-error { color: var(--red); font-size: 13px; min-height: 18px; margin-bottom: 8px; }
     button:disabled { opacity: .5; cursor: default; }
 
     /* ---- Tab 1: 3D + process ---- */
@@ -189,7 +208,21 @@
       <button class="tab" id="tab-calib">Calibration</button>
       <button class="tab" id="tab-log">Log</button>
     </div>
+    <span id="who" class="pill" style="display:none"></span>
+    <button id="logout" class="ghost" style="display:none">Log out</button>
   </header>
+
+  <!-- ============ Login overlay ============ -->
+  <div id="login-overlay">
+    <form id="login-form" autocomplete="off">
+      <h2>Ritaj · Admin</h2>
+      <p class="login-sub">Sign in to the operator console.</p>
+      <label>Username<input id="login-user" type="text" autocomplete="username" autofocus /></label>
+      <label>Password<input id="login-pass" type="password" autocomplete="current-password" /></label>
+      <div id="login-error"></div>
+      <button type="submit" id="login-submit">Sign in</button>
+    </form>
+  </div>
 
   <!-- ============ TAB 1: 3D + PROCESS ============ -->
   <div id="view-viz">
@@ -292,26 +325,85 @@
     const esc = s => (s || "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
     // ============ Operator auth ============
-    // When the server has ADMIN_TOKEN set, every /admin/* API call must carry
-    // it. We wrap fetch so all existing call sites send the stored token, and
-    // on a 401 we prompt once, remember the token, and reload.
+    // Every /admin/* API call carries the session token issued by /admin/login.
+    // We wrap fetch so all existing call sites send it, and on a 401 (expired
+    // or missing) we show the login overlay instead of failing silently.
+    const SESSION_KEY = "ritaj_admin_session";
+    localStorage.removeItem("ritaj_admin_token"); // drop the old shared-token scheme
+    const getToken = () => localStorage.getItem(SESSION_KEY) || "";
+
     const _fetch = window.fetch.bind(window);
     window.fetch = async (url, opts = {}) => {
       const isAdmin = typeof url === "string" && url.startsWith("/admin");
-      if (isAdmin) {
-        const token = localStorage.getItem("ritaj_admin_token") || "";
-        opts.headers = { ...(opts.headers || {}), "X-Admin-Token": token };
+      const isLogin = typeof url === "string" && url.startsWith("/admin/login");
+      if (isAdmin && !isLogin) {
+        opts.headers = { ...(opts.headers || {}), "X-Admin-Token": getToken() };
       }
       const resp = await _fetch(url, opts);
-      if (isAdmin && resp.status === 401) {
-        const entered = prompt("Admin token required (set as ADMIN_TOKEN on the server):");
-        if (entered) {
-          localStorage.setItem("ritaj_admin_token", entered.trim());
-          location.reload();
-        }
+      if (isAdmin && !isLogin && resp.status === 401) {
+        localStorage.removeItem(SESSION_KEY);
+        showLogin();
       }
       return resp;
     };
+
+    const overlay = () => document.getElementById("login-overlay");
+    function showLogin() { overlay().classList.add("show"); document.getElementById("login-user").focus(); }
+    function hideLogin() { overlay().classList.remove("show"); }
+
+    async function doLogin(ev) {
+      ev.preventDefault();
+      const errEl = document.getElementById("login-error");
+      const btn = document.getElementById("login-submit");
+      const username = document.getElementById("login-user").value.trim();
+      const password = document.getElementById("login-pass").value;
+      errEl.textContent = ""; btn.disabled = true; btn.textContent = "Signing in…";
+      try {
+        const r = await _fetch("/admin/login", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
+        if (r.ok) {
+          const { token } = await r.json();
+          localStorage.setItem(SESSION_KEY, token);
+          document.getElementById("login-pass").value = "";
+          hideLogin();
+          await bootAuthed();
+        } else {
+          const { detail } = await r.json().catch(() => ({}));
+          errEl.textContent = detail || `Sign-in failed (${r.status}).`;
+        }
+      } catch {
+        errEl.textContent = "Could not reach the server.";
+      } finally {
+        btn.disabled = false; btn.textContent = "Sign in";
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem(SESSION_KEY);
+      document.getElementById("who").style.display = "none";
+      document.getElementById("logout").style.display = "none";
+      showLogin();
+    }
+
+    // Verify the stored session and reveal the console; returns true if authed.
+    async function bootAuthed() {
+      const r = await _fetch("/admin/me", { headers: { "X-Admin-Token": getToken() } });
+      if (r.status === 200) {
+        const { username } = await r.json();
+        const who = document.getElementById("who");
+        if (username) { who.textContent = "👤 " + username; who.style.display = ""; }
+        document.getElementById("logout").style.display = username ? "" : "none";
+        hideLogin();
+        buildProcess(); resetSteps(); loadPoints();
+        return true;
+      }
+      if (r.status === 401) { showLogin(); return false; }
+      // 404 = accounts not configured (legacy/open mode): just load the console.
+      buildProcess(); resetSteps(); loadPoints();
+      return true;
+    }
 
     // ============ Process stepper ============
     // Every step in the pipeline; the answering ones light up live per query.
@@ -724,7 +816,9 @@
     opRunner("op-chunks", "chunks-out", "/admin/chunks", renderChunks);
 
     // ============ init ============
-    buildProcess(); resetSteps(); loadPoints();
+    document.getElementById("login-form").addEventListener("submit", doLogin);
+    document.getElementById("logout").addEventListener("click", logout);
+    bootAuthed();
   </script>
 </body>
 </html>

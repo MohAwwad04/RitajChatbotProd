@@ -309,6 +309,12 @@ def test_chatlog_records_session_user_client(tmp_path, monkeypatch):
     assert (entry["session"], entry["user"], entry["client"]) == ("sess-1", "lina", "extension")
 
 
+def test_privacy_page_exists_and_routed():
+    from ritaj import api
+    assert (api._STATIC / "privacy.html").is_file()
+    assert any(getattr(r, "path", None) == "/privacy" for r in api.app.routes)
+
+
 # --- Admin auth ---------------------------------------------------------------
 
 def _req_with_headers(headers: dict):
