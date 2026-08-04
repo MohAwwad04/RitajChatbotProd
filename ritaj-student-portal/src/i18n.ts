@@ -8,10 +8,6 @@ export type Lang = 'ar' | 'en'
 export const dict = {
   ar: {
     dir: 'rtl' as const,
-    gate_title: 'أهلاً بك في مساعد رتاج',
-    gate_prompt: 'ما اسمك؟ سنستخدمه لتخصيص محادثتك.',
-    gate_placeholder: 'اكتب اسمك هنا',
-    gate_start: 'ابدأ المحادثة',
 
     assistant_name: 'مساعد رتاج',
     assistant_status: 'متصل بسجلك الأكاديمي',
@@ -24,7 +20,7 @@ export const dict = {
     recent_label: 'المحادثات الأخيرة',
     manage_history: 'إدارة سجل المحادثات',
 
-    greeting: 'أهلاً',
+    greeting: 'أهلاً بك',
     today: 'اليوم',
     overview_h1: 'كل طريقك في مكان واحد',
     overview_p: 'اسأل عن خطتك، مواعيدك، ورسومك. يربط رتاج الإجابة بسجلك الحالي.',
@@ -65,10 +61,6 @@ export const dict = {
   },
   en: {
     dir: 'ltr' as const,
-    gate_title: 'Welcome to the Ritaj Assistant',
-    gate_prompt: "What's your name? We'll use it to personalize your chat.",
-    gate_placeholder: 'Type your name here',
-    gate_start: 'Start chatting',
 
     assistant_name: 'Ritaj Assistant',
     assistant_status: 'Connected to your academic record',
@@ -81,7 +73,7 @@ export const dict = {
     recent_label: 'Recent conversations',
     manage_history: 'Manage chat history',
 
-    greeting: 'Hi',
+    greeting: 'Welcome',
     today: 'Today',
     overview_h1: 'Your whole journey in one place',
     overview_p: 'Ask about your plan, deadlines, and fees. Ritaj ties the answer to your current record.',

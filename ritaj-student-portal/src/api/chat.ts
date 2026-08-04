@@ -55,8 +55,10 @@ export type ChatTurn = { role: 'user' | 'assistant'; content: string }
 
 export type ChatMeta = {
   history?: ChatTurn[]
-  sessionId?: string // groups this conversation's turns in the admin log
-  user?: string // the student's self-reported display name
+  // Groups this conversation's turns in the aggregate log. Client-generated and
+  // random: it identifies a chat, not a student. There is deliberately no name
+  // field — the portal does not ask for one (roadmap Phase 8).
+  sessionId?: string
 }
 
 export async function streamChat(
@@ -73,15 +75,15 @@ export async function streamChat(
   }
 
   try {
-    const response = await fetch('/chat/stream', {
+    const response = await fetch('/v2/chat/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message,
         history: meta.history ?? [],
         session_id: meta.sessionId ?? null,
-        user: meta.user ?? null,
         client: 'portal',
+        locale: document.documentElement.lang === 'ar' ? 'ar' : 'en',
       }),
       signal,
     })

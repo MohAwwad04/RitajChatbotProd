@@ -30,7 +30,7 @@ def _model() -> "CrossEncoder":
     # expensive, and it must not sit between process start and the port binding.
     from sentence_transformers import CrossEncoder  # noqa: PLC0415
 
-    return CrossEncoder(settings.rerank_model)
+    return CrossEncoder(settings.rerank_model, revision=settings.rerank_revision)
 
 
 def rerank_scored(

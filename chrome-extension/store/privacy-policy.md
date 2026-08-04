@@ -1,120 +1,252 @@
-# Privacy Policy — Ritaj Assistant
+# Privacy policy — Ritaj Assistant
 
-**Chrome extension & web chatbot for Birzeit University student services · Effective 6 July 2026**
+**Last updated:** 4 August 2026
+**Applies to:** the Ritaj Assistant Chrome extension and the web version at
+`mohawwad04-ritaj-rag.hf.space`.
 
 > العربية أدناه (Arabic version below).
 
-## What the assistant is
+Ritaj Assistant is an **independent student project**. It is not an official
+Birzeit University product and is not endorsed by Birzeit University.
 
-Ritaj Assistant answers questions about Birzeit University and the Ritaj portal
-(registration, fees, grades, deadlines, IT help) in Arabic or English. It is an
-independent student project and is not an official Birzeit University product.
-It requires no account and no sign-in.
+This policy describes what actually happens, checked against the code. Where a
+behaviour is a limitation rather than a promise, it says so.
 
-## What is sent to our server
+---
 
-When you send a message, the extension (or the web portal) transmits to our
-backend at `mohawwad04-ritaj-rag.hf.space`:
+## 1. What is sent to our server
 
-- the question you typed;
-- the recent turns of the current conversation, so follow-up questions make sense;
-- a random session identifier (a UUID generated locally — it identifies the
-  conversation, not you) and a client tag ("extension" or "portal").
+When you send a message, the extension sends:
 
-Nothing else is collected: no name, no email, no student ID, no browsing
-history, no page content, no location, no cookies, no advertising or analytics
-trackers.
+- the text you typed;
+- up to the last 8 turns of the current conversation, so follow-up questions
+  make sense;
+- a random session id generated in your browser, which groups one conversation's
+  turns. It is not derived from anything about you, and it is replaced when you
+  start a new chat or clear history;
+- the language you have selected (`ar` or `en`);
+- the label `chrome-extension`, so we can tell extension traffic from web traffic.
 
-## How your message is processed
+**Nothing else.** In particular the extension does **not** send the page you are
+viewing, its URL, its title, its content, your cookies, your login session, your
+form entries, your student id, or your browsing history. It has no permission to
+read any of those — see §6.
 
-The server searches a knowledge base of public Birzeit University information
-and sends your question plus the retrieved passages to a third-party
-language-model provider, [Groq](https://groq.com), to compose the answer text.
-Groq receives only the conversation content — never any identifier of you or
-your device beyond what any internet request carries.
+The web version sends the same fields with a different client label.
 
-## Logging and retention
+## 2. Who processes your message
 
-Questions and answers (with their random session id) may be logged on the
-server so we can monitor answer quality. These logs live in temporary storage
-that is erased whenever the server restarts or is rebuilt; they are not backed
-up, shared, or used for anything except improving the assistant. Please do not
-type passwords or personal information into the chat.
+To compose an answer, your message and the retrieved Ritaj document excerpts are
+sent to **Cloudflare Workers AI**, which runs the Google Gemma 4 language model.
+Cloudflare receives the conversation content and nothing that identifies you —
+no name, no student id, no session id, and no IP address from us.
 
-## What stays on your device
+Cloudflare's handling of that data is governed by their terms, not ours.
 
-Your chat history and language preference are stored locally with
-`chrome.storage.local` so the conversation survives closing the popup. They
-never leave your browser except as the "recent turns" described above. Press ↺
-(new chat) to erase the conversation, or uninstall the extension to remove
-everything.
+*(An earlier version of this policy named Groq. The provider changed; this
+document is the current one.)*
 
-## What we don't do
+## 3. What is stored on your device
 
-- We do not sell, rent, or share your data with anyone.
-- We do not use your data for advertising, profiling, or creditworthiness.
-- The extension loads no remote code (Manifest V3 compliant) and talks to
-  exactly one host: our own backend.
+Your conversation and language preference are stored in `chrome.storage.local`,
+on your computer. It never syncs to a Google account, and we cannot read it.
 
-## Changes and contact
+It is capped at 40 turns or roughly 120 KB, whichever comes first; older turns
+are dropped past that.
 
-If this policy changes, the update will be posted at this address with a new
-effective date. Questions: moh.awwad243@gmail.com.
+**Delete it at any time** with the 🗑 button in the panel, or by removing the
+extension. That erases it immediately and completely.
+
+## 4. What is stored on our server
+
+By default the server keeps **aggregate operational records only**:
+
+- when a request happened, and how long it took;
+- whether the answer was grounded, repaired, refused or abstained;
+- which approved Ritaj documents were used;
+- an error code if something failed;
+- the random session id and the client label;
+- the *length* of your question and answer, not their text.
+
+**The text of your questions and answers is not stored** in this mode.
+
+Server logs record a coarsened form of your IP address (e.g. `192.0.x.x`) for
+abuse control and rate limiting, plus a random per-request id. Identifiers such
+as student ids, emails and phone numbers are masked before anything is written.
+
+Records are deleted after **30 days**.
+
+### If raw conversations are ever stored
+
+A "full" logging mode exists for a supervised pilot. It would store redacted
+conversation text. It is **off**, and turning it on requires a clear in-product
+opt-in and a stated retention period first. If you were not asked, it is not on.
+
+## 5. Opening Ritaj pages
+
+Some answers offer a button such as **Open course registration**. If you press
+it, the extension opens that page in a tab.
+
+- The destination comes from a **fixed, human-reviewed list** of
+  `ritaj.birzeit.edu` addresses. The language model cannot produce a URL; the
+  most it can do is name an entry that already exists on that list.
+- The extension checks the address itself before opening it — correct scheme,
+  exactly the host `ritaj.birzeit.edu`, and a registered path.
+- Nothing happens without your click.
+- Once the page is open, the extension **does not read it, fill it, click
+  anything in it, or submit anything**. If Ritaj asks you to sign in, that is
+  between you and Ritaj; we never see your password or your session.
+
+The assistant cannot register you for a course, drop one, pay a fee, or submit
+any form. It refuses and offers to open the relevant page instead.
+
+## 6. Permissions, and why each exists
+
+| Permission | Why it is needed |
+|---|---|
+| `storage` | keeps your conversation and language on your device |
+| `sidePanel` | shows the chat in Chrome's side panel when you click the icon |
+| access to `mohawwad04-ritaj-rag.hf.space` | our backend — where questions are answered |
+
+The extension does **not** request `tabs`, `activeTab`, `scripting`,
+`webNavigation`, `cookies`, `history`, or access to `ritaj.birzeit.edu` itself.
+Chrome does not require the `tabs` permission to open a tab, and host access to
+Ritaj would let the extension read your Ritaj pages, which it must not.
+
+## 7. Limited Use
+
+Our use of information received from Google APIs adheres to the
+[Chrome Web Store User Data Policy](https://developer.chrome.com/docs/webstore/program-policies/limited-use),
+including the Limited Use requirements. Specifically:
+
+- data is used **only** to provide the assistant's answering feature;
+- it is **not** sold or transferred to third parties, except to the model
+  provider in §2 for the sole purpose of composing your answer;
+- it is **not** used for advertising, credit assessment, or any purpose
+  unrelated to answering your question;
+- no human reads your conversations, except where you explicitly opt in to a
+  pilot.
+
+**Browsing activity:** the extension collects none. It does not read the URL,
+title or content of any page, including Ritaj pages.
+
+## 8. What we do not claim
+
+- We do **not** claim to be private by design, anonymous, or free of data
+  collection. Sections 1–4 describe what is transferred and what is kept.
+- We do **not** claim answers are always correct. The assistant answers from a
+  limited set of approved Ritaj pages, which can be out of date.
+- We do **not** claim to be an official Birzeit service.
+
+## 9. Accuracy and disclaimer
+
+Information may change without the assistant knowing. Deadlines, fees and
+regulations must be confirmed on Ritaj or with the relevant office — **the
+linked Ritaj page is authoritative, not the answer**. The assistant does not
+give personalised academic, financial or legal advice, and no decision with
+academic or financial consequences should rest on it alone.
+
+Answers show which page each fact came from and when that page was captured. If
+a source is past its refresh window, the answer says so.
+
+## 10. Children
+
+The assistant is intended for university students and staff. It is not directed
+at children under 13.
+
+## 11. Changes
+
+Material changes appear here with a new "last updated" date, and in the
+extension listing before the change ships.
+
+## 12. Contact
+
+Questions, corrections, or a request to delete data:
+**ritaj.assistant.project@gmail.com**
+
+To delete everything held about you on your device, press 🗑 in the panel. There
+is no server-side account to delete, because we do not create one.
 
 ---
 
 # سياسة الخصوصية — مساعد ريتاج
 
-**امتداد كروم وروبوت محادثة لخدمات طلبة جامعة بيرزيت · سارية اعتباراً من 6 تموز 2026**
+**آخر تحديث:** 4 آب 2026
 
-## ما هو المساعد
+مساعد ريتاج **مشروع طلابي مستقل**، وليس منتجاً رسمياً لجامعة بيرزيت ولا معتمداً
+منها.
 
-مساعد ريتاج يجيب عن الأسئلة حول جامعة بيرزيت وبوابة ريتاج (التسجيل، الرسوم،
-العلامات، المواعيد، الدعم الفني) بالعربية أو الإنجليزية. وهو مشروع طلابي مستقل
-وليس منتجاً رسمياً لجامعة بيرزيت، ولا يتطلب أي حساب أو تسجيل دخول.
+## 1. ما يُرسَل إلى خادمنا
 
-## ما الذي يُرسل إلى خادمنا
+عند إرسال رسالة تُرسِل الإضافة: نص رسالتك، وحتى آخر 8 مداخلات من المحادثة الحالية،
+ومعرّف جلسة عشوائي يُنشأ في متصفحك لتجميع مداخلات المحادثة الواحدة، واللغة التي
+اخترتها.
 
-عند إرسال رسالة، يرسل الامتداد (أو البوابة) إلى خادمنا على
-`mohawwad04-ritaj-rag.hf.space`:
+**ولا شيء غير ذلك.** لا تُرسِل الإضافة الصفحة التي تتصفحها ولا عنوانها ولا محتواها
+ولا ملفات تعريف الارتباط ولا جلسة دخولك ولا ما تكتبه في النماذج ولا رقمك الجامعي
+ولا سجل تصفحك. ولا تملك أصلاً الصلاحيات اللازمة لقراءة أي من ذلك — انظر البند 6.
 
-- السؤال الذي كتبته؛
-- الرسائل الأخيرة من المحادثة الحالية كي تُفهم أسئلة المتابعة؛
-- معرّف جلسة عشوائي (يُنشأ محلياً ويعرّف المحادثة لا شخصك) ووسم العميل.
+## 2. من يعالج رسالتك
 
-لا يُجمع أي شيء آخر: لا اسم، لا بريد إلكتروني، لا رقم جامعي، لا سجل تصفح، لا
-محتوى صفحات، لا موقع جغرافي، لا ملفات تعريف ارتباط، ولا أدوات تتبع إعلانية أو
-تحليلية.
+لصياغة الإجابة تُرسَل رسالتك ومقاطع من صفحات ريتاج المعتمدة إلى **Cloudflare
+Workers AI** الذي يشغّل نموذج Google Gemma 4. يتلقى Cloudflare محتوى المحادثة فقط،
+دون أي معرّف لك — لا اسم ولا رقم جامعي ولا معرّف جلسة ولا عنوان IP من طرفنا.
 
-## كيف تُعالج رسالتك
+*(كانت نسخة سابقة من هذه السياسة تذكر Groq؛ تغيّر المزوّد، وهذه هي النسخة الحالية.)*
 
-يبحث الخادم في قاعدة معرفية من معلومات جامعة بيرزيت العامة، ثم يرسل سؤالك مع
-المقاطع المسترجعة إلى مزوّد نماذج لغوية خارجي هو [Groq](https://groq.com)
-لصياغة نص الإجابة. لا يتلقى Groq سوى محتوى المحادثة — دون أي معرّف لك أو
-لجهازك.
+## 3. ما يُخزَّن على جهازك
 
-## السجلات ومدة الاحتفاظ
+تُحفظ محادثتك وتفضيل اللغة في `chrome.storage.local` على جهازك فقط، ولا تُزامَن مع
+حساب Google، ولا يمكننا قراءتها. الحد الأقصى 40 مداخلة أو نحو 120 كيلوبايت.
 
-قد تُسجَّل الأسئلة والإجابات (مع معرّف الجلسة العشوائي) على الخادم لمراقبة جودة
-الإجابات. تُحفظ هذه السجلات في تخزين مؤقت يُمسح عند كل إعادة تشغيل أو إعادة بناء
-للخادم، ولا تُنسخ احتياطياً ولا تُشارك ولا تُستخدم إلا لتحسين المساعد. الرجاء
-عدم كتابة كلمات سر أو معلومات شخصية في المحادثة.
+**يمكنك حذفها في أي وقت** بزر 🗑 في اللوحة أو بإزالة الإضافة.
 
-## ما يبقى على جهازك
+## 4. ما يُخزَّن على خادمنا
 
-يُخزَّن سجل المحادثة وتفضيل اللغة محلياً عبر `chrome.storage.local` كي تبقى
-المحادثة بعد إغلاق النافذة، ولا يغادران متصفحك إلا ضمن «الرسائل الأخيرة»
-المذكورة أعلاه. اضغط ↺ (محادثة جديدة) لمسح المحادثة، أو أزل الامتداد لحذف كل
-شيء.
+افتراضياً تُحفظ **سجلات تشغيلية مجمّعة فقط**: وقت الطلب ومدته، ونتيجة التحقق من
+الإسناد، والوثائق المعتمدة المستخدَمة، ورمز الخطأ إن وُجد، ومعرّف الجلسة العشوائي،
+وطول السؤال والإجابة — **دون نص السؤال أو الإجابة**.
 
-## ما لا نفعله
+تُسجَّل صيغة مبهمة من عنوان IP (مثل `192.0.x.x`) لمنع إساءة الاستخدام. وتُخفى
+المعرّفات مثل الأرقام الجامعية والبريد الإلكتروني والهواتف قبل أي كتابة. وتُحذف
+السجلات بعد **30 يوماً**.
 
-- لا نبيع بياناتك ولا نؤجرها ولا نشاركها مع أي جهة.
-- لا نستخدم بياناتك للإعلانات أو التنميط أو تقييم الجدارة الائتمانية.
-- لا يحمّل الامتداد أي شيفرة عن بُعد (متوافق مع Manifest V3) ويتصل بمضيف واحد
-  فقط: خادمنا.
+## 5. فتح صفحات ريتاج
 
-## التغييرات والتواصل
+قد تتضمن بعض الإجابات زراً مثل **فتح تسجيل المساقات**. عند الضغط عليه تُفتح الصفحة
+في تبويب جديد.
 
-إذا تغيّرت هذه السياسة فسيُنشر التحديث على هذا العنوان مع تاريخ سريان جديد.
-للاستفسارات: moh.awwad243@gmail.com.
+- الوجهة مختارة من **قائمة ثابتة راجعها إنسان** من عناوين `ritaj.birzeit.edu`.
+  لا يستطيع النموذج اللغوي إنتاج رابط؛ أقصى ما يفعله تسمية إدخال موجود مسبقاً.
+- تتحقق الإضافة من العنوان بنفسها قبل فتحه.
+- لا يحدث شيء دون ضغطك.
+- بعد فتح الصفحة **لا تقرأها الإضافة ولا تملؤها ولا تضغط فيها ولا ترسل شيئاً**.
+  وإن طلب ريتاج تسجيل الدخول فذلك بينك وبين ريتاج؛ لا نرى كلمة سرك ولا جلستك.
+
+لا يستطيع المساعد تسجيلك في مساق أو حذفه أو دفع رسوم أو إرسال أي طلب؛ سيرفض ذلك
+ويعرض عليك فتح الصفحة المناسبة.
+
+## 6. الصلاحيات
+
+`storage` لحفظ المحادثة على جهازك، و`sidePanel` لعرض المحادثة في اللوحة الجانبية،
+والوصول إلى `mohawwad04-ritaj-rag.hf.space` وهو خادمنا.
+
+لا تطلب الإضافة `tabs` ولا `activeTab` ولا `scripting` ولا `cookies` ولا `history`
+ولا أي وصول إلى `ritaj.birzeit.edu` نفسه.
+
+## 7. ما لا ندّعيه
+
+لا ندّعي أن الخدمة خاصة تماماً أو أنها لا تجمع أي بيانات — البنود 1 إلى 4 تصف ما
+يُنقَل وما يُحفظ. ولا ندّعي أن الإجابات صحيحة دائماً: صفحة ريتاج المرتبطة هي المرجع
+وليست الإجابة. ولسنا خدمة رسمية من جامعة بيرزيت.
+
+## 8. إخلاء المسؤولية
+
+قد تتغير المعلومات دون أن يعلم المساعد. تأكّد من المواعيد والرسوم والأنظمة على
+ريتاج أو من الدائرة المعنية. لا يقدّم المساعد استشارة أكاديمية أو مالية أو قانونية
+شخصية، ولا ينبغي أن يُبنى عليه وحده أي قرار له أثر أكاديمي أو مالي.
+
+## 9. التواصل
+
+للأسئلة أو التصحيحات أو طلب حذف البيانات:
+**ritaj.assistant.project@gmail.com**

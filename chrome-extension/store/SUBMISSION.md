@@ -3,118 +3,184 @@
 Every field the developer console asks for, ready to copy-paste. The only two
 things this folder can't contain are your Google account and the $5 fee.
 
-## 0. What's already done (nothing to prepare)
+**Updated 4 Aug 2026 for v1.1.0** — the popup became a side panel, navigation
+actions were added, and the listing copy was corrected. See "What changed" at
+the end before reusing anything from an older submission.
+
+## 0. What's already prepared
 
 | Requirement | Where it is |
 |---|---|
-| Upload package | `../../ritaj-assistant-extension.zip` (repo root, matches source) |
+| Upload package | build from the release tag (see §7), not from the working tree |
 | Store icon 128×128 | inside the zip (`icons/icon128.png`) |
-| Screenshots ×3 (1280×800) | `assets/shot1_en.png`, `assets/shot2_ar.png`, `assets/shot3_welcome.png` |
+| Screenshots ×3 (1280×800) | **must be recaptured** — the old ones show the popup |
 | Small promo tile 440×280 (optional) | `assets/promo_tile.png` |
-| Privacy policy — **live public URL** | https://gist.github.com/MohAwwad04/beff035eade5e6c34f766c0ec07c3ff5 |
-| Privacy policy — on our own domain | https://mohawwad04-ritaj-rag.hf.space/privacy (live after the next backend redeploy: `HF_TOKEN=… .venv/bin/python scripts/deploy_space.py "deploy: privacy page"`) |
-| Summary (≤132 chars) | auto-taken from `manifest.json` `description` (131 chars ✓) |
+| Privacy policy — public URL | https://mohawwad04-ritaj-rag.hf.space/privacy |
+| Summary (≤132 chars) | from `manifest.json` `description` |
+
+> The three screenshots in `assets/` show the 384×560 popup with an "open full
+> portal" button and no source rows. That UI no longer exists. Submitting them
+> would misrepresent the product, which is itself a policy problem — recapture
+> the side panel at 1280×800 (English, Arabic, and one showing an **Open …**
+> navigation button with its source row).
 
 ## 1. Register (one time)
 
 https://chrome.google.com/webstore/devconsole → sign in → pay the **$5**
-one-time registration fee → verify the account email
-(**moh.awwad243@gmail.com** — the store displays it publicly on the listing).
+one-time registration fee → verify the account email.
+
+Use a **project address**, not a personal one: the store displays it publicly on
+the listing. `ritaj.assistant.project@gmail.com` is used in the privacy policy;
+keep them the same.
 
 ## 2. New item → upload
 
-Upload `ritaj-assistant-extension.zip`. The name, version (1.0.0), icon, and
-summary are read from the manifest automatically.
+Upload the zip built from the release tag. The name, version, icon and summary
+are read from the manifest automatically.
 
 ## 3. Store listing tab
 
 - **Description** (paste both languages in one box):
 
 ```
-Instant, grounded answers about Birzeit University and the Ritaj portal — right from your Chrome toolbar.
+Ask about the Ritaj portal in Arabic or English, and open the right Ritaj page — from Chrome's side panel.
 
-Ritaj Assistant is a bilingual (Arabic / English) chatbot for Birzeit students. Ask about course registration, tuition and fees, grades, the academic calendar, deadlines, IT support, and anything Ritaj — and get a concise answer that is:
+Ritaj Assistant is an independent, student-built helper for Birzeit University's Ritaj portal. It is not an official Birzeit service and is not endorsed by the university.
 
-✓ GROUNDED — every answer is generated from a knowledge base of university information and automatically verified against it before you see it.
-✓ LINKED — answers include a button to the official page (e.g. Tuition Fees), so you can confirm the source yourself.
-✓ CONVERSATIONAL — follow-up questions work ("and for the MBA program?"), and your chat survives closing the popup.
-✓ PRIVATE — no account, no sign-in, no tracking. Your conversation is stored only on your device; see the privacy policy.
+Ask about course registration, the academic calendar, deadlines, or how to find something on Ritaj, and get a short answer that is:
 
-Toggle Arabic ⇄ English with one tap (ع / EN). Start a fresh conversation anytime with ↺.
+✓ SOURCED — every answer shows which Ritaj page it came from and when that page was captured. If a source may be out of date, the answer says so.
+✓ CHECKED — answers are verified against their sources before you see them. When no approved source covers your question, the assistant says it doesn't know instead of guessing.
+✓ NAVIGABLE — some answers offer a button such as "Open course registration", which opens a reviewed ritaj.birzeit.edu page in a tab. Only after you press it.
+✓ ALONGSIDE YOUR WORK — the chat lives in Chrome's side panel and stays open while you use Ritaj.
 
-Note: this is an independent student project, not an official Birzeit University product.
+What it cannot do: it cannot see your account, grades, schedule or balance, and it cannot register, drop, pay or submit anything for you. It never reads the page you are on.
+
+Switch Arabic ⇄ English with one tap (ع / EN). Clear your stored history anytime with 🗑.
+
+Information may change — the linked Ritaj page is authoritative.
 
 —————
 
-مساعد ريتاج — إجابات فورية وموثّقة عن جامعة بيرزيت وبوابة ريتاج، من شريط أدوات كروم مباشرة.
+مساعد ريتاج — اسأل عن بوابة ريتاج بالعربية أو الإنجليزية، وافتح الصفحة المناسبة، من اللوحة الجانبية في كروم.
 
-اسأل بالعربية أو الإنجليزية عن تسجيل المساقات، الرسوم والأقساط، العلامات، التقويم الأكاديمي، المواعيد، والدعم الفني:
+مساعد ريتاج مشروع طلابي مستقل، وليس خدمة رسمية من جامعة بيرزيت ولا معتمداً منها.
 
-✓ إجابات مبنية على قاعدة معرفية من معلومات الجامعة ويجري التحقق منها تلقائياً قبل عرضها.
-✓ مع كل إجابة رابط إلى الصفحة الرسمية للتأكد من المصدر بنفسك.
-✓ يفهم أسئلة المتابعة، ويحفظ المحادثة حتى بعد إغلاق النافذة.
-✓ خصوصية كاملة: بلا حساب، بلا تسجيل دخول، بلا تتبع — محادثتك تبقى على جهازك فقط.
+اسأل عن تسجيل المساقات أو التقويم الأكاديمي أو المواعيد أو كيفية الوصول إلى صفحة في ريتاج، واحصل على إجابة قصيرة:
 
-بدّل بين العربية والإنجليزية بلمسة واحدة (ع / EN)، وابدأ محادثة جديدة بزر ↺.
+✓ مع مصدرها: تعرض كل إجابة الصفحة التي جاءت منها وتاريخ التقاطها، وتنبّهك إن كان المصدر قد يكون قديماً.
+✓ متحقَّق منها قبل عرضها. وإن لم يوجد مصدر معتمد يغطي سؤالك، يقول المساعد إنه لا يعرف بدل التخمين.
+✓ مع زر لفتح صفحة ريتاج المناسبة (مثل "فتح تسجيل المساقات") — ولا تُفتح إلا بضغطك.
+✓ في اللوحة الجانبية، تبقى مفتوحة أثناء استخدامك لريتاج.
 
-ملاحظة: هذا مشروع طلابي مستقل وليس منتجاً رسمياً لجامعة بيرزيت.
+ما لا يستطيعه: لا يرى حسابك ولا علاماتك ولا جدولك ولا رصيدك، ولا يستطيع التسجيل أو الحذف أو الدفع أو إرسال أي طلب نيابةً عنك، ولا يقرأ الصفحة التي تتصفحها.
+
+بدّل بين العربية والإنجليزية بلمسة (ع / EN)، وامسح محادثاتك المحفوظة بزر 🗑.
+
+قد تتغير المعلومات — صفحة ريتاج المرتبطة هي المرجع.
 ```
 
 - **Category:** Education
 - **Language:** English (Arabic text is included in the description above)
-- **Screenshots:** upload the three PNGs from `assets/` in this order:
-  `shot1_en.png`, `shot2_ar.png`, `shot3_welcome.png`
-- **Small promo tile:** `assets/promo_tile.png`
+- **Screenshots:** recapture — see §0.
 - **Homepage URL (optional):** https://mohawwad04-ritaj-rag.hf.space
+
+### Claims deliberately removed from the old listing
+
+| Old copy | Why it's gone |
+|---|---|
+| "✓ PRIVATE — no account, no sign-in, no tracking" | The server keeps aggregate records and the message goes to a third-party model host. "No tracking" overstates it. |
+| "خصوصية كاملة" ("complete privacy") | Same, and stronger in Arabic. |
+| "survives closing the popup" | There is no popup. |
+| "button to the official page" | The linked page is a reviewed Ritaj page; "official" implied university endorsement. |
+| "anything Birzeit" / fees, grades topics | The approved corpus is Ritaj-only. Promising fee and grade answers promises something the corpus does not contain. |
 
 ## 4. Privacy tab
 
 - **Single purpose description:**
 
 ```
-Answers user-typed questions about Birzeit University and its Ritaj student portal by sending the question to the project's own question-answering backend and displaying the cited answer.
+Answers user-typed questions about Birzeit University's Ritaj student portal by sending the question to the project's own backend, displaying a cited answer, and — when the user presses a button — opening a reviewed ritaj.birzeit.edu page in a tab.
 ```
 
 - **Permission justifications:**
 
 ```
-storage — Persists the user's chat history and language preference locally (chrome.storage.local) so the conversation survives closing the popup. This data never leaves the device except as recent conversation turns sent with the user's next question.
+storage — Stores the user's chat history and language preference locally (chrome.storage.local), capped at 40 turns, so the conversation survives closing and reopening the side panel. It is never synced and never sent anywhere except as recent conversation turns accompanying the user's next question. The user can erase it with the in-panel Clear history button.
 
-Host permission (https://mohawwad04-ritaj-rag.hf.space/*) — This is the extension's own backend. Each typed question (plus recent turns of the same conversation) is sent to it to generate the grounded, cited answer. No other host is contacted.
+sidePanel — The extension's entire interface is a side panel that opens when the toolbar icon is clicked. It is used for nothing else.
+
+Host permission (https://mohawwad04-ritaj-rag.hf.space/*) — This is the extension's own backend, and the only host it contacts. Each typed question, plus up to the last 8 turns of the same conversation, a random session id and the chosen language, is sent to it to generate the cited answer. No page data of any kind is sent.
 ```
 
-- **Remote code:** No, I am not using remote code. (All JS is packaged; MV3.)
+- **Why no `tabs` permission:** the extension opens tabs with `chrome.tabs.create`
+  / `chrome.tabs.update`, which Chrome does not gate behind the `tabs`
+  permission. `tabs` would additionally expose tab URLs and titles, which the
+  extension does not use and the privacy policy says it does not collect.
+- **Why no host permission on ritaj.birzeit.edu:** the extension *navigates* to
+  Ritaj pages but never reads them. Host access would grant reading.
+- **Remote code:** No. All JS is packaged (MV3, ES modules, no CDN).
 - **Data usage → what is collected:** tick **Personal communications** only
-  (the chat messages the user types). Everything else: not collected.
-- **Certifications:** tick all three (no sale of data; no use/transfer
+  (the chat messages the user types). Not: location, health, financial,
+  authentication, personal identifiers, web history, user activity.
+- **Certifications:** tick all three (no sale of data; no use or transfer
   unrelated to the single purpose; no use for creditworthiness/lending).
 - **Privacy policy URL:**
 
 ```
-https://gist.github.com/MohAwwad04/beff035eade5e6c34f766c0ec07c3ff5
+https://mohawwad04-ritaj-rag.hf.space/privacy
 ```
 
-  (After redeploying the backend you can switch it to
-  `https://mohawwad04-ritaj-rag.hf.space/privacy` — same text, own domain.
-  Keep the gist up if you ever change it, or update both.)
+  Must be live before submitting — the reviewer will open it. It is served by
+  the backend, so it requires a successful deploy first.
 
 ## 5. Distribution tab
 
-- **Visibility:** Public
-- **Distribution:** all regions (or at minimum Palestine + wherever students are)
-- **Pricing:** Free
+- **Visibility:** start with **Unlisted** for the closed pilot (roadmap Phase 10
+  stages 1–2), then Public for the limited rollout.
+- **Distribution:** all regions.
+- **Pricing:** Free.
 
-## 6. Submit for review
+## 6. Before you submit — check these
 
-Popup-only extensions with one host permission typically clear review in 1–3
-days. You'll get an email at moh.awwad243@gmail.com either way. Once published,
-share the store link — any Chrome user can install it; no developer mode needed.
+- [ ] `python scripts/check_extension.py` passes (minimal permissions, allowlist parity)
+- [ ] `python scripts/check_privacy.py` passes (disclosures match the code)
+- [ ] `python scripts/check_navigation.py` passes
+- [ ] The privacy policy URL loads publicly
+- [ ] Screenshots show the side panel, not the popup
+- [ ] The listing does not claim the product is official, private, or always correct
+- [ ] Backend is deployed and `/ready` is healthy — a reviewer who types a
+      question and gets an error will reject the listing
 
-## Updating later (new version)
+## 7. Building the package (from a tag, not the working tree)
 
-1. Edit the code, bump `"version"` in `manifest.json` (e.g. 1.0.1).
-2. Re-zip: `cd chrome-extension && zip -r ../ritaj-assistant-extension.zip . -x '*.DS_Store' 'icons/icon.svg' 'README.md' 'store/*'`
-3. Dev console → the item → Package → upload new zip → submit.
+```bash
+git checkout vX.Y.Z
+cd chrome-extension
+zip -r ../ritaj-assistant-extension.zip . \
+  -x '*.DS_Store' 'icons/icon.svg' 'README.md' 'store/*' '*.test.mjs'
+cd .. && shasum -a 256 ritaj-assistant-extension.zip
+python scripts/release_manifest.py -o release/manifest.json   # records that checksum
+```
 
-If the backend URL ever changes: update `config.js` **and** `host_permissions`
-in `manifest.json`, plus the justifications above.
+Building from the working tree would ship whatever is uncommitted, which cannot
+be reviewed or reproduced later.
+
+## 8. Updating later
+
+1. Bump `"version"` in `manifest.json`.
+2. Tag, rebuild the zip from the tag, re-run the checks in §6.
+3. Dev console → the item → Package → upload → submit.
+
+If the backend URL changes: update `config.js`, `host_permissions` in
+`manifest.json`, the justification above, **and** both privacy documents.
+
+## What changed in v1.1.0
+
+- Popup → side panel (`sidePanel` permission added, `default_popup` removed).
+- Navigation actions to reviewed `ritaj.birzeit.edu` pages, user-confirmed.
+- Model host changed from Groq to Cloudflare Workers AI (disclosed in §2 of the
+  privacy policy).
+- The web portal no longer asks for the student's name.
+- Listing copy corrected: no "complete privacy", no "official", no promise of
+  fee/grade answers the approved corpus does not contain.

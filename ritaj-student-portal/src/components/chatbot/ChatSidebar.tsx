@@ -2,9 +2,9 @@ import { Brand } from '../ui/Brand'
 import { GeneratedIcon } from '../ui/GeneratedIcon'
 import { useI18n } from '../../i18n'
 
-type Props = { open: boolean; onClose: () => void; onNewChat: () => void; userName: string }
+type Props = { open: boolean; onClose: () => void; onNewChat: () => void }
 
-export function ChatSidebar({ open, onClose, onNewChat, userName }: Props) {
+export function ChatSidebar({ open, onClose, onNewChat }: Props) {
   const { s } = useI18n()
   return (
     <aside className={`chat-sidebar ${open ? 'is-open' : ''}`}>
@@ -25,7 +25,6 @@ export function ChatSidebar({ open, onClose, onNewChat, userName }: Props) {
         ))}
       </div>
       <div className="chat-sidebar__footer">
-        <div className="chat-profile"><span>{userName.trim().charAt(0) || 'ط'}</span><div><strong>{userName}</strong></div><GeneratedIcon name="ellipsis" size={17} /></div>
         <button><GeneratedIcon name="trash" size={17} /> {s.manage_history}</button>
       </div>
     </aside>

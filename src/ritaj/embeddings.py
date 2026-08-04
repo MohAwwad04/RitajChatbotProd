@@ -29,7 +29,7 @@ if TYPE_CHECKING:  # type-checkers get the real symbol; runtime never imports it
 def _model() -> "SentenceTransformer":
     from sentence_transformers import SentenceTransformer  # noqa: PLC0415
 
-    return SentenceTransformer(settings.embed_model)
+    return SentenceTransformer(settings.embed_model, revision=settings.embed_revision)
 
 
 def embed_passages(texts: list[str]) -> list[list[float]]:

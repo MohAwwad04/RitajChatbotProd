@@ -17,36 +17,14 @@ function LangToggle({ className }: { className?: string }) {
   )
 }
 
-// Shown on first visit: ask the student for their name before the chat opens.
-function NameGate({ onSubmit }: { onSubmit: (name: string) => void }) {
-  const { s } = useI18n()
-  const [value, setValue] = useState('')
-  return (
-    <div className="name-gate">
-      <LangToggle className="name-gate__lang" />
-      <form
-        className="name-gate__card"
-        onSubmit={(e) => {
-          e.preventDefault()
-          const name = value.trim()
-          if (name) onSubmit(name)
-        }}
-      >
-        <div className="name-gate__avatar"><GeneratedIcon name="assistant" size={30} /></div>
-        <h1>{s.gate_title}</h1>
-        <p>{s.gate_prompt}</p>
-        <input
-          autoFocus
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder={s.gate_placeholder}
-          aria-label={s.gate_placeholder}
-        />
-        <button type="submit" disabled={!value.trim()}>{s.gate_start}</button>
-      </form>
-    </div>
-  )
-}
+// The name gate that used to live here has been removed (roadmap Phase 8).
+//
+// It asked every student for their name before the chat would open, and sent
+// that name to the backend with every message — while the privacy policy said
+// no names were collected. There are two ways to resolve a contradiction like
+// that: change the policy, or stop collecting. Nothing in the product needed
+// the name (it produced a sidebar avatar letter), so collecting it could not be
+// justified.
 
 // A fresh id per conversation so the admin log can group its turns.
 const newSessionId = () =>
@@ -56,7 +34,6 @@ const newSessionId = () =>
 
 export function ChatbotPage() {
   const { s, lang } = useI18n()
-  const [userName, setUserName] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [thinking, setThinking] = useState(false)
@@ -132,7 +109,7 @@ export function ChatbotPage() {
       },
       onError: () => render(text || s.error_connect),
       onDone: () => setThinking(false),
-    }, { history, sessionId, user: userName })
+    }, { history, sessionId })
   }
 
   useEffect(() => {
@@ -149,12 +126,9 @@ export function ChatbotPage() {
     return () => window.removeEventListener('keydown', handleShortcut)
   }, [])
 
-  // Gate the page on a name first.
-  if (!userName) return <NameGate onSubmit={setUserName} />
-
   return (
     <div className={`chatbot-app ${darkMode ? 'is-dark' : ''}`} dir={s.dir}>
-      <ChatSidebar userName={userName} open={sidebarOpen} onClose={() => setSidebarOpen(false)} onNewChat={newChat} />
+      <ChatSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} onNewChat={newChat} />
       <main className="chat-main">
         <header className="chat-header">
           <div className="chat-header__title">
@@ -172,7 +146,7 @@ export function ChatbotPage() {
           </div>
         </header>
         <div className="chat-conversation">
-          <ChatThread messages={messages} thinking={thinking} userName={userName} />
+          <ChatThread messages={messages} thinking={thinking} />
           <ChatComposer value={input} onChange={setInput} onSend={sendMessage} disabled={thinking} />
         </div>
       </main>

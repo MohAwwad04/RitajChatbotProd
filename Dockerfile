@@ -40,10 +40,15 @@ COPY pyproject.toml ./
 COPY src ./src
 RUN pip install -e .
 
-# Pre-download (bake) the embedder + reranker into the image.
+# Pre-download (bake) the embedder + reranker into the image, at the SAME
+# revisions config.py loads at runtime. A bare repo name resolves to whatever is
+# on the hub that day, so an unpinned rebuild can bake different weights than
+# the ones the release evaluation was run against.
+ARG EMBED_REVISION=3d7cfbdacd47fdda877c5cd8a79fbcc4f2a574f3
+ARG RERANK_REVISION=953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e
 RUN python -c "from sentence_transformers import SentenceTransformer, CrossEncoder; \
-SentenceTransformer('intfloat/multilingual-e5-large'); \
-CrossEncoder('BAAI/bge-reranker-v2-m3')"
+SentenceTransformer('intfloat/multilingual-e5-large', revision='${EMBED_REVISION}'); \
+CrossEncoder('BAAI/bge-reranker-v2-m3', revision='${RERANK_REVISION}')"
 
 COPY data ./data
 COPY scripts ./scripts

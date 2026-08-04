@@ -43,6 +43,18 @@ class Settings:
     # Reranker (cross-encoder; multilingual). Refines the fused candidate list.
     rerank_model: str = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
 
+    # Model revisions, pinned. A bare repo name resolves to whatever is on the
+    # hub at build time, so two builds of the same commit can bake different
+    # weights — and different weights mean different retrieval, which invalidates
+    # the evaluation the release was signed off on. These are the revisions the
+    # current results were produced with.
+    embed_revision: str = os.getenv(
+        "EMBED_REVISION", "3d7cfbdacd47fdda877c5cd8a79fbcc4f2a574f3"
+    )
+    rerank_revision: str = os.getenv(
+        "RERANK_REVISION", "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+    )
+
     # Vector store (Qdrant). A remote http URL talks to a Qdrant server (Docker in
     # dev). Set QDRANT_PATH instead to run Qdrant embedded on local disk — no
     # separate service needed, which is what the single-container HF Spaces deploy

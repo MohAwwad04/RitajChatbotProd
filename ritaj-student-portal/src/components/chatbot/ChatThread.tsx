@@ -29,7 +29,7 @@ function RegistrationAnswer() {
   )
 }
 
-export function ChatThread({ messages, thinking, userName }: { messages: ChatMessage[]; thinking: boolean; userName: string }) {
+export function ChatThread({ messages, thinking }: { messages: ChatMessage[]; thinking: boolean }) {
   const { s } = useI18n()
   const endRef = useRef<HTMLDivElement>(null)
   const previousState = useRef({ messageCount: messages.length, thinking })
@@ -46,7 +46,7 @@ export function ChatThread({ messages, thinking, userName }: { messages: ChatMes
       <section className="chat-visual-overview" aria-label={s.aria_overview}>
         <img src="/assets/ritaj-ai-portal.png" alt={s.img_alt} />
         <div className="chat-visual-overview__content">
-          <span>{s.greeting} {userName}</span>
+          <span>{s.greeting}</span>
           <h1>{s.overview_h1}</h1>
           <p>{s.overview_p}</p>
           <div className="chat-visual-overview__signals">
