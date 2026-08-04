@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ritaj Assistant</title>
+  <!-- No remote origins: everything the panel loads ships inside the extension. -->
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <div id="app">
+    <header id="header">
+      <div class="brand">
+        <img src="icons/icon32.png" alt="" width="26" height="26" />
+        <div class="brand__text">
+          <strong id="title">Ritaj Assistant</strong>
+          <!-- "Independent" is on the face of the product, not buried in the
+               store listing: this is not a Birzeit service. -->
+          <small id="subtitle">Independent · Birzeit University</small>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="lang-toggle" type="button" title="العربية / English" aria-label="Switch language">ع</button>
+        <button id="new-chat" type="button" title="New chat" aria-label="Start a new chat">↺</button>
+        <button id="clear-history" type="button" title="Clear stored history" aria-label="Clear stored history">🗑</button>
+      </div>
+    </header>
+
+    <!-- Initialization / offline / quota states live here, announced once and
+         never interleaved with the transcript. -->
+    <div id="status" class="status" role="status" aria-live="polite" hidden></div>
+
+    <main id="thread" tabindex="0" aria-label="Conversation"></main>
+
+    <!-- Streaming text is announced separately and politely. aria-live on the
+         transcript itself makes a screen reader re-read every token. -->
+    <p id="sr-status" class="sr-only" role="status" aria-live="polite"></p>
+
+    <div id="suggestions"></div>
+
+    <form id="composer">
+      <label class="sr-only" for="input">Your question</label>
+      <input id="input" type="text" autocomplete="off" enterkeyhint="send"
+             placeholder="Ask about Ritaj…" />
+      <button id="send" type="submit" disabled aria-label="Send">➤</button>
+      <button id="stop" type="button" hidden aria-label="Stop generating">■</button>
+    </form>
+
+    <footer id="disclaimer">
+      <span id="disclaimer-text">Independent project — not an official Birzeit service. Confirm anything important on the linked Ritaj page.</span>
+    </footer>
+  </div>
+  <script src="config.js"></script>
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>
