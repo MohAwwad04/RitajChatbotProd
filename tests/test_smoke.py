@@ -5,6 +5,8 @@ generation tests (which need the embedder + a running LLM) come later and grow
 into the golden-set eval harness (plan section 13).
 """
 
+import json
+
 from ritaj import arabic, grounding, guardrails
 from ritaj.bm25 import _tokenize
 from ritaj.evaluation import _norm
@@ -289,24 +291,88 @@ def test_condense_rejects_runaway_rewrite(monkeypatch):
     assert generate.condense("and MBA?", history) == "and MBA?"
 
 
+def test_oversized_history_is_rejected_before_it_reaches_the_prompt():
+    """First layer: schema bounds. A hostile body never becomes a prompt."""
+    import pytest
+    from pydantic import ValidationError
+
+    from ritaj.api import ChatRequest
+
+    with pytest.raises(ValidationError):
+        ChatRequest(message="q", history=[{"role": "user", "content": "x" * 10_000}])
+    with pytest.raises(ValidationError):
+        ChatRequest(message="q", history=[{"role": "user", "content": "ok"}] * 60)
+    with pytest.raises(ValidationError):
+        ChatRequest(message="")
+
+
 def test_bounded_history_clamps_turns_and_chars():
+    """Second layer: what passes the schema is still clamped to the prompt budget."""
     from ritaj.api import ChatRequest, _bounded_history
     from ritaj.config import settings
     req = ChatRequest(
         message="q",
-        history=[{"role": "user", "content": "x" * 10_000}] * 30,
+        history=[{"role": "user", "content": "x" * 7_000}] * 30,
     )
     turns = _bounded_history(req)
     assert len(turns) == settings.history_max_turns
     assert all(len(t["content"]) <= settings.history_max_chars for t in turns)
 
 
-def test_chatlog_records_session_user_client(tmp_path, monkeypatch):
+def test_chatlog_aggregate_mode_keeps_no_conversation_text(tmp_path, monkeypatch):
+    """Default telemetry groups a conversation without storing what was said."""
     from ritaj import chatlog
+    from ritaj.config import settings
+
     monkeypatch.setattr(chatlog, "_PATH", tmp_path / "log.jsonl")
-    chatlog.record("q?", "a.", session="sess-1", user="lina", client="extension")
+    monkeypatch.setattr(settings, "chat_log_mode", "aggregate")
+    chatlog.record("What is my GPA? My ID is 1191234.", "I can't look that up.",
+                   session="sess-1", user="lina", client="extension", verdict="blocked")
     (entry,) = chatlog.recent()
-    assert (entry["session"], entry["user"], entry["client"]) == ("sess-1", "lina", "extension")
+
+    assert (entry["session"], entry["client"]) == ("sess-1", "extension")
+    assert entry["verdict"] == "blocked"
+    assert "question" not in entry and "answer" not in entry and "user" not in entry
+    assert entry["question_chars"] > 0  # shape is kept, content is not
+    assert "1191234" not in json.dumps(entry)
+
+
+def test_chatlog_full_mode_stores_redacted_text(tmp_path, monkeypatch):
+    from ritaj import chatlog
+    from ritaj.config import settings
+
+    monkeypatch.setattr(chatlog, "_PATH", tmp_path / "log.jsonl")
+    monkeypatch.setattr(settings, "chat_log_mode", "full")
+    chatlog.record("My ID is 1191234 and my email is a@student.birzeit.edu",
+                   "Contact Registration.", session="sess-1", client="extension")
+    (entry,) = chatlog.recent()
+
+    assert "1191234" not in entry["question"]
+    assert "a@student.birzeit.edu" not in entry["question"]
+    assert "[id]" in entry["question"] and "[email]" in entry["question"]
+
+
+def test_chatlog_purges_entries_past_retention(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    from ritaj import chatlog
+    from ritaj.config import settings
+
+    path = tmp_path / "log.jsonl"
+    monkeypatch.setattr(chatlog, "_PATH", path)
+    monkeypatch.setattr(settings, "chat_log_retention_days", 30)
+
+    old = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat(timespec="seconds")
+    path.write_text(
+        json.dumps({"ts": old, "session": "old"}) + "\n"
+        + json.dumps({"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                      "session": "new"}) + "\n",
+        encoding="utf-8",
+    )
+
+    assert chatlog.purge_expired() == 1
+    remaining = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    assert [e["session"] for e in remaining] == ["new"]
 
 
 def test_privacy_page_exists_and_routed():

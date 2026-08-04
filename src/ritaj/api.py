@@ -12,6 +12,7 @@ Run:  uvicorn ritaj.api:app --reload --app-dir src
 import json
 import logging
 import secrets as _secrets
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
@@ -23,9 +24,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import (
-    about, adminauth, answer_checks, bootstrap, chatlog, citations, config, corpus,
-    errors, evaluation, generate, grounding, guardrails, ingest, links, llm, readiness,
-    runtime_config, source_policy, viz,
+    about, adminauth, answer_checks, bootstrap, budget, chatlog, citations, config,
+    corpus, errors, evaluation, generate, grounding, guardrails, ingest, links, llm,
+    ratelimit, readiness, redact, runtime_config, source_policy, viz,
 )
 from .config import settings
 from .generate import answer, answer_stream, repair
@@ -75,6 +76,40 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def request_context(request: Request, call_next):
+    """Attach a request id, cap the body, and log the outcome without the content.
+
+    The id is the join key between what a student can quote ("it said
+    LLM_UNAVAILABLE, request 3f2a…") and the protected log line that holds the
+    provider's actual error. It is echoed in the response header and in the SSE
+    `done` event.
+
+    The body cap runs before parsing: `max_length` on the model bounds each
+    field, but a 50 MB body still has to be read and buffered before validation
+    can reject it.
+    """
+    request_id = _secrets.token_hex(8)
+    request.state.request_id = request_id
+
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > settings.max_body_bytes:
+        err = errors.REQUEST_TOO_LARGE(detail=f"content-length {declared}")
+        return JSONResponse(err.public(), status_code=err.http_status,
+                            headers={"X-Request-ID": request_id})
+
+    started = time.monotonic()
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    if request.url.path.endswith("/chat") or request.url.path.endswith("/chat/stream"):
+        log.info(
+            "chat request_id=%s status=%s ms=%.0f client_ip=%s",
+            request_id, response.status_code, (time.monotonic() - started) * 1000,
+            redact.ip(request.client.host if request.client else None),
+        )
+    return response
 
 
 def _supplied_token(request: Request) -> str:
@@ -156,19 +191,37 @@ app.mount("/static", StaticFiles(directory=_STATIC), name="static")
 
 class ChatTurn(BaseModel):
     role: Literal["user", "assistant"]
-    content: str
+    content: str = Field(max_length=8000)
 
 
 class ChatRequest(BaseModel):
-    message: str
+    """The /chat and /v2/chat request body.
+
+    Length bounds are on the model, not checked in the handler, so an oversized
+    request is rejected before any of it is used to build a prompt — the prompt
+    is what costs money on a metered provider.
+    """
+
+    message: str = Field(min_length=1, max_length=8000)
     # Conversation memory: the client sends its prior turns with every request
     # (the server stays stateless — nothing is cached per chat server-side).
-    history: list[ChatTurn] = Field(default_factory=list)
+    history: list[ChatTurn] = Field(default_factory=list, max_length=50)
     # Optional client metadata, logged so the admin console can group a
-    # conversation's turns and see who/where a question came from.
-    session_id: str | None = None
-    user: str | None = None
-    client: str | None = None
+    # conversation's turns and see which client a question came from.
+    session_id: str | None = Field(default=None, max_length=100)
+    client: str | None = Field(default=None, max_length=40)
+    # v2 additions. `locale` picks the language of fixed responses when the
+    # message itself is ambiguous. `current_ritaj_path` is accepted for forward
+    # compatibility and deliberately unused: the first release sends no browsing
+    # context at all, which is what lets the store listing say so (Phase 8).
+    locale: Literal["ar", "en"] | None = None
+    current_ritaj_path: str | None = Field(default=None, max_length=200)
+    # Deprecated: a self-reported display name. The portal no longer collects
+    # one (Phase 8) and it is only ever stored in the opt-in "full" log mode.
+    # Kept so an older published client's request still validates instead of
+    # 422-ing. Not marked deprecated=True on the field itself: pydantic emits a
+    # DeprecationWarning on every read, which would fire on every request.
+    user: str | None = Field(default=None, max_length=100)
 
 
 def _bounded_history(req: ChatRequest) -> list[dict]:
@@ -193,6 +246,24 @@ async def _public_error_handler(request: Request, exc: errors.PublicError):
     locale = request.headers.get("accept-language", "en")[:2].lower()
     headers = {"Retry-After": str(exc.retry_after)} if exc.retry_after else None
     return JSONResponse(exc.public(locale), status_code=exc.http_status, headers=headers)
+
+
+def _admit(request: Request, req: ChatRequest) -> str:
+    """Everything that must hold before a question costs anything. Returns the id.
+
+    Order is deliberate — each check is cheaper than the next, and each refuses
+    with a code the client can act on:
+      readiness  → the service can answer at all
+      rate limit → this caller has had its share (429 + Retry-After)
+      budget     → today's provider allowance is spent (429, resets at UTC midnight)
+    The concurrency cap is taken later, around generation itself, so a request
+    that will be refused doesn't occupy a slot while being refused.
+    """
+    _require_ready()
+    client_ip = request.client.host if request.client else None
+    ratelimit.check(client_ip, req.session_id)
+    budget.check()
+    return getattr(request.state, "request_id", "")
 
 
 def _require_ready() -> None:
@@ -340,8 +411,30 @@ def admin_trace(req: ChatRequest):
 
 @app.get("/admin/log", dependencies=_ADMIN)
 def admin_log(limit: int = 200):
-    """Recent chat interactions (what users asked + what the bot answered)."""
-    return {"entries": chatlog.recent(limit)}
+    """Recent interactions.
+
+    In the default aggregate mode these carry verdicts, timings and source ids
+    but no question or answer text — see chatlog.py. `summary` is the view an
+    operator usually wants, and the one that stays meaningful in either mode.
+    """
+    return {"entries": chatlog.recent(limit), "summary": chatlog.summary()}
+
+
+@app.get("/admin/usage", dependencies=_ADMIN)
+def admin_usage():
+    """Provider budget, concurrency and rate-limit posture."""
+    return {
+        "budget": budget.snapshot(),
+        "concurrency": ratelimit.snapshot(),
+        "llm": {"model": settings.llm_model, "circuit": llm.circuit_state()},
+        "corpus": corpus.summary(),
+    }
+
+
+@app.post("/admin/log/purge", dependencies=_ADMIN)
+def admin_log_purge():
+    """Apply the retention period now, deleting entries past it."""
+    return {"status": "ok", "removed": chatlog.purge_expired()}
 
 
 @app.post("/admin/log/clear", dependencies=_ADMIN)
@@ -452,10 +545,12 @@ def _abstain(question: str, log: dict) -> dict:
     }
 
 
+@app.post("/v2/chat")
 @app.post("/chat")
-def chat(req: ChatRequest):
-    _require_ready()
-    _log = dict(user=req.user, session=req.session_id, client=req.client)
+def chat(req: ChatRequest, request: Request):
+    request_id = _admit(request, req)
+    _log = dict(user=req.user, session=req.session_id, client=req.client,
+                request_id=request_id)
     # "Who made this?" — a fixed credit answer with team photos, no retrieval/LLM.
     if about.match(req.message):
         ans = about.response(req.message)
@@ -487,11 +582,16 @@ def chat(req: ChatRequest):
     # Untrusted-source defense: flag AND redact instruction-override spans so the
     # model never sees them; generate + ground against the sanitized text.
     clean, injection = guardrails.sanitize(passages)
-    draft = answer(req.message, clean, history)
+    started = time.monotonic()
+    with ratelimit.generation_slot():
+        draft = answer(req.message, clean, history)
+    budget.consume()
     # Ground-check the text the student actually sees, not the pre-repair draft.
     final, report, repaired = generate.finalize(draft, clean, req.message)
     chatlog.record(req.message, final, verdict=report.get("verdict"),
-                   repaired=repaired, injection=injection["detected"], **_log)
+                   repaired=repaired, injection=injection["detected"],
+                   sources=[m.get("source") for _, m in passages],
+                   latency_ms=(time.monotonic() - started) * 1000, **_log)
     # Build the page links from the cited (raw) text first, then strip the [n]
     # markers from what the student actually sees.
     page_links = links.links_for(passages, final)
@@ -511,8 +611,9 @@ def chat(req: ChatRequest):
     }
 
 
+@app.post("/v2/chat/stream")
 @app.post("/chat/stream")
-def chat_stream_route(req: ChatRequest):
+def chat_stream_route(req: ChatRequest, request: Request):
     """Stream the answer as Server-Sent Events.
 
     The scope guardrail runs first: a blocked request emits a single `blocked`
@@ -520,11 +621,22 @@ def chat_stream_route(req: ChatRequest):
     we send the sources as the opening event (plus an `injection` event if a
     retrieved chunk looks adversarial), then stream the answer token-by-token.
     Once the full answer is in hand we run the grounding guardrail and send its
-    verdict, then a final done event.
+    verdict, then a final done event carrying the request id.
+
+    Event order is part of the contract: sources → [injection] → token* →
+    grounding → [repair] → links → [navigation] → done. Clients must ignore
+    event types they do not recognise, so a later release can add one without
+    breaking a published extension.
+
+    Admission (readiness, rate limit, budget) happens here, before the response
+    starts. Once the stream is open the only way to report a refusal is an
+    `error` event the client may already have rendered tokens ahead of.
     """
-    _require_ready()
+    request_id = _admit(request, req)
     scope = guardrails.check_scope(req.message)
-    _log = dict(user=req.user, session=req.session_id, client=req.client)
+    _log = dict(user=req.user, session=req.session_id, client=req.client,
+                request_id=request_id)
+    done = json.dumps({"type": "done", "request_id": request_id})
 
     def events():
         # "Who made this?" — fixed credit answer + team photos, then stop.
@@ -532,13 +644,13 @@ def chat_stream_route(req: ChatRequest):
             ans = about.response(req.message)
             chatlog.record(req.message, ans, verdict="about", **_log)
             yield f"data: {json.dumps({'type': 'about', 'answer': ans, 'images': about.IMAGES})}\n\n"
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            yield f"data: {done}\n\n"
             return
         # Blocked input: send the decline as the answer and stop — no retrieval.
         if not scope["allowed"]:
             chatlog.record(req.message, scope["response"], blocked=scope["category"], **_log)
             yield f"data: {json.dumps({'type': 'blocked', 'category': scope['category'], 'answer': scope['response']})}\n\n"
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            yield f"data: {done}\n\n"
             return
 
         # Conversation memory: retrieval sees a standalone rewrite of follow-ups;
@@ -552,7 +664,7 @@ def chat_stream_route(req: ChatRequest):
             # no quota.
             result = _abstain(req.message, _log)
             yield f"data: {json.dumps({'type': 'blocked', 'category': 'no_sources', 'answer': result['answer']})}\n\n"
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            yield f"data: {done}\n\n"
             return
         yield f"data: {json.dumps({'type': 'sources', 'sources': _sources(passages)})}\n\n"
         # Flag AND redact instruction-override spans before they reach the model.
@@ -600,7 +712,7 @@ def chat_stream_route(req: ChatRequest):
             log.exception("unexpected chat stream failure")
             internal = errors.INTERNAL(detail=f"{type(exc).__name__}: {exc}")
             yield f"data: {json.dumps({'type': 'error', **internal.public()})}\n\n"
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        yield f"data: {done}\n\n"
 
     return StreamingResponse(
         events(),
