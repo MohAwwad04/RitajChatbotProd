@@ -27,6 +27,17 @@ DEFAULTS: dict = {
     "top_k": 6,
     "candidates": 20,
     "rrf_k": 60,
+    # Abstention floor on the reranker's score. The cross-encoder emits an
+    # unbounded logit, where ~0 is the decision boundary between "relevant" and
+    # "not"; a small negative default keeps genuine-but-weak matches while
+    # dropping chunks that merely share vocabulary. Calibrate on the release
+    # evaluation set (scripts/eval_threshold.py) before trusting the default.
+    "min_relevance": -2.0,
+    # Rank penalties applied after reranking (see retrieve.py). Deliberately
+    # small: these express a preference, and a hard filter would abstain on
+    # questions the corpus can actually answer.
+    "expired_penalty": 3.0,
+    "language_penalty": 0.5,
     # Chunking (changing these needs a re-index to take effect)
     "chunk_target": 120,
     "chunk_overlap": 20,
@@ -51,6 +62,18 @@ SPEC: list[dict] = [
     {"key": "rrf_k", "label": "RRF k", "type": "int", "min": 1, "max": 200,
      "group": "Retrieval", "requires": "live",
      "help": "Rank-smoothing constant in Reciprocal Rank Fusion (60 is conventional)."},
+    {"key": "min_relevance", "label": "Abstention floor", "type": "float",
+     "min": -12.0, "max": 12.0, "step": 0.25, "group": "Retrieval", "requires": "live",
+     "help": "Min reranker score for a chunk to count as evidence. Nothing above it "
+             "means the assistant abstains instead of answering."},
+    {"key": "expired_penalty", "label": "Expired-source penalty", "type": "float",
+     "min": 0.0, "max": 20.0, "step": 0.5, "group": "Retrieval", "requires": "live",
+     "help": "Rank penalty for a source past its effective_to date, unless the "
+             "question names that year."},
+    {"key": "language_penalty", "label": "Other-language penalty", "type": "float",
+     "min": 0.0, "max": 5.0, "step": 0.1, "group": "Retrieval", "requires": "live",
+     "help": "Rank penalty for a source in the other language. Small on purpose — "
+             "many Ritaj pages exist in one language only."},
     {"key": "chunk_target", "label": "Chunk size (words)", "type": "int", "min": 40, "max": 600,
      "group": "Chunking", "requires": "retrain",
      "help": "Target words per chunk. ~120 was the benchmarked sweet spot."},

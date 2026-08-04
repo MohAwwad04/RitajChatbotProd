@@ -48,21 +48,29 @@ from . import arabic
 
 # Value-lookups: the student is asking for the *contents* of a personal record.
 # No corpus path can answer these, so they always route to auth / the office.
+#
+# `_MOD` absorbs the adjectives students actually type — "my *current* balance",
+# "my *final* grades", "my *fall semester* schedule". Without it the pattern
+# only fired on the bare noun, so "What's my current balance?" was answered as a
+# general question. Bounded to two words so it can't swallow a whole clause.
+_MOD = r"(?:\w+\s+){0,2}"
 _PERSONAL_VALUE = re.compile(
-    r"\bwhat(?:'s| is)\s+my\s+(gpa|balance|schedule|grade|grades|mark|marks|"
-    r"score|scores)\b"
-    r"|\bshow\s+me\s+my\s+(gpa|balance|schedule|grade|grades|transcript|mark|"
+    rf"\bwhat(?:'s| is)\s+my\s+{_MOD}(gpa|balance|schedule|grade|grades|mark|marks|"
+    r"score|scores|transcript)\b"
+    rf"|\bshow\s+me\s+my\s+{_MOD}(gpa|balance|schedule|grade|grades|transcript|mark|"
     r"marks|score|scores)\b"
-    r"|\bhow\s+much\s+(do\s+i\s+owe|is\s+my\s+(tuition\s+)?balance)\b"
+    rf"|\bhow\s+much\s+(do\s+i\s+owe|is\s+my\s+{_MOD}balance)\b"
     r"|\bam\s+i\s+registered\b"
-    r"|\bwhat\s+courses?\s+am\s+i\s+(registered|enrolled)\b",
+    r"|\bwhat\s+courses?\s+am\s+i\s+(registered|enrolled)\b"
+    # "log in for me and check X" — asking the assistant to act as the student.
+    r"|\b(log|sign)\s*in\s+(to\s+\w+\s+)?(for|as)\s+me\b",
     re.I,
 )
 # A bare first-person possessive over a personal record. On its own this is
 # ambiguous (value vs. how-to); check_scope only treats it as personal when the
 # question is NOT navigational.
 _PERSONAL_POSSESSIVE = re.compile(
-    r"\bmy\s+(grade|grades|gpa|mark|marks|score|scores|transcript|schedule|"
+    rf"\bmy\s+{_MOD}(grade|grades|gpa|mark|marks|score|scores|transcript|schedule|"
     r"timetable|balance|tuition\s+balance|fees?\s+owed|financial\s+status|"
     r"registration\s+status|holds?)\b",
     re.I,
@@ -126,16 +134,35 @@ _INJECTION = re.compile(
 
 # What a blocked student sees. Kept fact-free (like generate.GROUNDING_FALLBACK)
 # so a decline can never itself be wrong, and always points to a human.
+# Bilingual, because a refusal is exactly where being understood matters most:
+# an Arabic question answered with an English decline reads as a broken product,
+# and the student is left without the handoff the decline exists to give.
+#
+# The personal-data text states the limitation as permanent-by-design rather
+# than "not yet": this release cannot inspect a student account at all, and
+# implying a future login would invite students to wait for something that is
+# not on the roadmap (ADR-002).
 _RESPONSE_PERSONAL = (
-    "I can't look up your personal records (grades, GPA, schedule, or balance) — "
-    "I don't have secure access to your student account. You can see them yourself "
-    "after signing in to Ritaj: grades under the Academic Records module, and your "
-    "schedule/registration under the Registration module. For fees or holds, "
-    "contact the Finance office, or Registration & Admission for anything else."
+    "I can't look up your personal records (grades, GPA, schedule, or balance). "
+    "I have no access to your student account and I can't sign in on your behalf — "
+    "this assistant only reads public Ritaj pages. You can see your own records "
+    "after signing in to Ritaj yourself. For fees or holds, contact the Finance "
+    "office; for anything else, Registration & Admission."
+)
+_RESPONSE_PERSONAL_AR = (
+    "لا أستطيع الاطلاع على سجلاتك الشخصية (العلامات أو المعدل أو الجدول أو الرصيد). "
+    "ليس لدي أي وصول إلى حسابك الجامعي ولا أستطيع تسجيل الدخول نيابة عنك — "
+    "هذا المساعد يقرأ صفحات ريتاج العامة فقط. يمكنك رؤية سجلاتك بنفسك بعد تسجيل "
+    "الدخول إلى ريتاج. للرسوم أو الأمور المالية راجع دائرة المالية، ولغير ذلك "
+    "دائرة التسجيل والقبول."
 )
 _RESPONSE_HARMFUL = (
-    "I can't help with that. I'm the Birzeit University student assistant, here "
-    "for questions about studying, registration, and campus services."
+    "I can't help with that. I'm an independent Birzeit University student "
+    "assistant, here for questions about studying, registration, and campus services."
+)
+_RESPONSE_HARMFUL_AR = (
+    "لا أستطيع المساعدة في ذلك. أنا مساعد طلابي مستقل لجامعة بيرزيت، "
+    "للأسئلة المتعلقة بالدراسة والتسجيل وخدمات الحرم الجامعي."
 )
 _RESPONSE_SELF_HARM = (
     "I'm really sorry you're feeling this way, and I'm not the right resource for "
@@ -143,6 +170,19 @@ _RESPONSE_SELF_HARM = (
     "Center (Dean of Students), a trusted person, or your local emergency services. "
     "You don't have to go through this alone."
 )
+_RESPONSE_SELF_HARM_AR = (
+    "يؤسفني حقاً أنك تشعر بهذا، وأنا لست المصدر المناسب لمساعدتك في هذا الأمر. "
+    "تواصل الآن مع من يستطيع المساعدة — مركز الإرشاد النفسي في جامعة بيرزيت "
+    "(عمادة شؤون الطلبة)، أو شخص تثق به، أو خدمات الطوارئ في منطقتك. "
+    "لست وحدك في هذا."
+)
+
+_ARABIC_SCRIPT = re.compile(r"[؀-ۿ]")
+
+
+def _localized(message: str, en: str, ar: str) -> str:
+    """Reply in the language the student wrote in."""
+    return ar if _ARABIC_SCRIPT.search(message) else en
 
 
 def check_scope(message: str) -> dict:
@@ -154,12 +194,16 @@ def check_scope(message: str) -> dict:
     """
     text = arabic.normalize_light(message)
 
+    def decline(category: str, en: str, ar: str) -> dict:
+        return {"allowed": False, "category": category,
+                "response": _localized(message, en, ar)}
+
     # Self-harm is checked first so it gets the supportive response, not the
     # generic harmful refusal.
     if _SELF_HARM.search(text):
-        return {"allowed": False, "category": "self_harm", "response": _RESPONSE_SELF_HARM}
+        return decline("self_harm", _RESPONSE_SELF_HARM, _RESPONSE_SELF_HARM_AR)
     if _HARMFUL.search(text):
-        return {"allowed": False, "category": "harmful", "response": _RESPONSE_HARMFUL}
+        return decline("harmful", _RESPONSE_HARMFUL, _RESPONSE_HARMFUL_AR)
 
     # Personal records. A value-lookup ("what is my GPA?") always needs auth. A
     # bare possessive ("my grades") is only personal when the question isn't a
@@ -167,9 +211,9 @@ def check_scope(message: str) -> dict:
     # so we let them through to retrieval rather than decline for lack of auth.
     navigational = bool(_NAVIGATIONAL.search(text))
     if _PERSONAL_VALUE.search(text):
-        return {"allowed": False, "category": "personal_data", "response": _RESPONSE_PERSONAL}
+        return decline("personal_data", _RESPONSE_PERSONAL, _RESPONSE_PERSONAL_AR)
     if not navigational and (_PERSONAL_POSSESSIVE.search(text) or _PERSONAL_AR.search(text)):
-        return {"allowed": False, "category": "personal_data", "response": _RESPONSE_PERSONAL}
+        return decline("personal_data", _RESPONSE_PERSONAL, _RESPONSE_PERSONAL_AR)
     return {"allowed": True, "category": None, "response": None}
 
 

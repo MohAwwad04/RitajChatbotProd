@@ -170,6 +170,20 @@ def _today() -> date:
     return datetime.now(timezone.utc).date()
 
 
+def meta_is_stale(meta: dict, on: date | None = None) -> bool:
+    """Staleness for a stored chunk's metadata (not a manifest record).
+
+    Computed at answer time, never at index time: a chunk indexed inside its
+    refresh window becomes stale simply by the passage of time, and an index
+    rebuilt weekly would otherwise keep asserting freshness it no longer has.
+    """
+    fetched = _parse_date(meta.get("as_of"))
+    interval = REFRESH_INTERVALS.get(meta.get("refresh", ""))
+    if fetched is None or interval is None:
+        return False
+    return (on or _today()) > fetched + interval
+
+
 def _parse_date(value: str | None) -> date | None:
     if not value:
         return None

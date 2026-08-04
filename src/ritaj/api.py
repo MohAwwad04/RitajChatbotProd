@@ -23,8 +23,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import (
-    about, adminauth, bootstrap, chatlog, citations, config, corpus, errors, evaluation,
-    generate, grounding, guardrails, ingest, links, llm, readiness, runtime_config, viz,
+    about, adminauth, answer_checks, bootstrap, chatlog, citations, config, corpus,
+    errors, evaluation, generate, grounding, guardrails, ingest, links, llm, readiness,
+    runtime_config, source_policy, viz,
 )
 from .config import settings
 from .generate import answer, answer_stream, repair
@@ -409,10 +410,46 @@ def admin_train():
 
 
 def _sources(passages) -> list[dict]:
-    return [
-        {"title": meta.get("title"), "source": meta.get("source")}
-        for _, meta in passages
-    ]
+    """What the client shows under an answer: page, capture date, freshness.
+
+    The canonical URL and `as_of` come from the source manifest, so a citation
+    the student can click is the same page the model was shown — see
+    generate._source_header, which builds the model-visible header from the same
+    metadata.
+    """
+    out = []
+    for _, meta in passages:
+        entry = {
+            "title": meta.get("title"),
+            "source": meta.get("source"),
+            "url": meta.get("url") or None,
+            "as_of": (meta.get("as_of") or "")[:10] or None,
+            "language": meta.get("language") or None,
+        }
+        if meta.get("stale") or source_policy.meta_is_stale(meta):
+            entry["stale"] = True
+        if meta.get("effective_to"):
+            entry["effective_to"] = meta["effective_to"][:10]
+        out.append(entry)
+    return out
+
+
+def _abstain(question: str, log: dict) -> dict:
+    """No retrieved source cleared the relevance floor — say so, spend no tokens.
+
+    Reaching the LLM with an empty source list invites it to answer from
+    parametric memory, which is the one thing a grounded assistant must not do.
+    """
+    text = generate.localized(generate.NO_SOURCES, generate.NO_SOURCES_AR, question)
+    chatlog.record(question, text, verdict="abstained", **log)
+    return {
+        "answer": text,
+        "repaired": False,
+        "abstained": True,
+        "sources": [],
+        "grounding": {"verdict": "abstained"},
+        "links": [],
+    }
 
 
 @app.post("/chat")
@@ -445,12 +482,14 @@ def chat(req: ChatRequest):
     history = _bounded_history(req)
     query = generate.condense(req.message, history)
     passages = retrieve(query)
+    if not passages:
+        return _abstain(req.message, _log)
     # Untrusted-source defense: flag AND redact instruction-override spans so the
     # model never sees them; generate + ground against the sanitized text.
     clean, injection = guardrails.sanitize(passages)
     draft = answer(req.message, clean, history)
-    report = grounding.check(draft, clean)
-    final, repaired = repair(draft, report)
+    # Ground-check the text the student actually sees, not the pre-repair draft.
+    final, report, repaired = generate.finalize(draft, clean, req.message)
     chatlog.record(req.message, final, verdict=report.get("verdict"),
                    repaired=repaired, injection=injection["detected"], **_log)
     # Build the page links from the cited (raw) text first, then strip the [n]
@@ -461,6 +500,10 @@ def chat(req: ChatRequest):
         "repaired": repaired,
         "sources": _sources(passages),
         "grounding": report,
+        # Citation coverage, stale sources, contradictory effective windows —
+        # things every sentence can pass individually while the answer as a
+        # whole still misleads.
+        "checks": answer_checks.run(final, passages, report),
         "injection": injection,
         # Deterministic page links for the cited docs (citation-aware; built from
         # data/links.yaml, never emitted by the model).
@@ -503,6 +546,14 @@ def chat_stream_route(req: ChatRequest):
         history = _bounded_history(req)
         query = generate.condense(req.message, history)
         passages = retrieve(query)
+        if not passages:
+            # Nothing cleared the abstention floor. Emit the decline as the
+            # answer and stop — no LLM call, so an unanswerable question costs
+            # no quota.
+            result = _abstain(req.message, _log)
+            yield f"data: {json.dumps({'type': 'blocked', 'category': 'no_sources', 'answer': result['answer']})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
         yield f"data: {json.dumps({'type': 'sources', 'sources': _sources(passages)})}\n\n"
         # Flag AND redact instruction-override spans before they reach the model.
         clean, injection = guardrails.sanitize(passages)
@@ -525,11 +576,13 @@ def chat_stream_route(req: ChatRequest):
                     first = False
                 yield f"data: {json.dumps({'type': 'token', 'text': shown})}\n\n"
             draft = "".join(parts)
-            report = grounding.check(draft, clean)
-            yield f"data: {json.dumps({'type': 'grounding', 'grounding': report})}\n\n"
-            # The draft was already streamed; if the guardrail rejects it, tell
-            # the client to swap in the safe (citation-free) fallback.
-            final, repaired = repair(draft, report)
+            # finalize() re-checks the repaired text, so the verdict sent to the
+            # client describes what the client will display.
+            final, report, repaired = generate.finalize(draft, clean, req.message)
+            checks = answer_checks.run(final, passages, report)
+            yield f"data: {json.dumps({'type': 'grounding', 'grounding': report, 'checks': checks})}\n\n"
+            # The draft was already streamed; if the guardrail rejected it, tell
+            # the client to swap in the safe (citation-free) text.
             if repaired:
                 yield f"data: {json.dumps({'type': 'repair', 'answer': citations.strip(final)})}\n\n"
             # Page links last (after the answer settles) so they're keyed on the
