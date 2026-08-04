@@ -1,9 +1,18 @@
-"""Ingestion pipeline: load -> chunk -> embed -> upsert.
+"""Ingestion pipeline: approved sources -> chunk -> embed -> upsert.
 
-This is the simplest honest version of plan section 6. It deliberately uses a
-plain sliding-window chunker; structure-aware chunking and Arabic normalization
-come later. Metadata (source/title) is attached now because the answer layer
-needs it to cite sources.
+The input is no longer "every file in a folder". It is the set of records in
+`data/sources.yaml` that pass the source policy — approved, on `ritaj.birzeit.edu`,
+hash-matched, PII-clean. A folder scan cannot express provenance, and provenance
+is the whole point: the answer layer cites these documents to students, so what
+goes in has to be checkable by code (see source_policy.py).
+
+Every chunk carries its record's canonical URL, language, owner, fetch date and
+effective dates. That metadata is what lets retrieval filter by language and
+term, and lets generation show the student *which page, as of when*.
+
+A development path remains (`build_from_directory`) for the quarantined corpus,
+so the pipeline can be exercised before authorized Ritaj exports exist. It
+refuses to run in production.
 """
 
 import re
@@ -11,7 +20,8 @@ from pathlib import Path
 
 from pypdf import PdfReader
 
-from . import runtime_config, vectorstore
+from . import runtime_config, source_policy, vectorstore
+from .config import production
 from .embeddings import embed_passages
 
 SUPPORTED = {".pdf", ".txt", ".md"}
@@ -161,33 +171,37 @@ def chunk_markdown(text: str, target: int = 120, overlap: int = 20) -> list[str]
     return chunks
 
 
-def build_index(data_dir: str = "data/raw") -> int:
-    """(Re)build the vector index from every supported file in data_dir.
-
-    Recreates the collection from scratch, so re-running is clean (no stale
-    chunks left from a previous chunking). Returns the number of chunks indexed.
-    """
-    # Chunking is tunable from /admin (runtime_config): strategy + size + overlap.
-    target = runtime_config.get("chunk_target")
-    overlap = runtime_config.get("chunk_overlap")
+def _chunker():
+    """The chunker selected by the live calibration settings."""
     strategy = runtime_config.get("chunk_strategy")
-    chunker = chunk_markdown if strategy == "structure" else chunk_text
+    return chunk_markdown if strategy == "structure" else chunk_text
 
-    root = Path(data_dir)
-    docs = []  # (id, chunk_text, metadata) across all files
-    for path in sorted(root.rglob("*")):
-        if path.suffix.lower() not in SUPPORTED:
-            continue
-        chunks = chunker(read_document(path), target=target, overlap=overlap)
-        meta = {"source": path.name, "title": path.stem.replace("_", " "), "path": str(path)}
-        # id from the full relative path, so same-named files in different
-        # folders (or with different extensions) don't collide and overwrite.
-        rel = str(path.relative_to(root))
-        for i, chunk in enumerate(chunks):
-            docs.append((f"{rel}-{i}", chunk, meta))
-        if chunks:
-            print(f"  indexed {len(chunks):>3} chunks from {path.name}")
 
+def _source_metadata(source: source_policy.Source) -> dict:
+    """Provenance attached to every chunk of one record.
+
+    Flat scalars only: this becomes the Qdrant payload, and the values are what
+    retrieval filters on and what the citation header shows the student.
+    """
+    return {
+        "source": source.id,
+        "title": source.title,
+        "url": source.canonical_url,
+        "language": source.language,
+        "owner": source.owner,
+        "as_of": source.fetched_at,
+        "effective_from": source.effective_from or "",
+        "effective_to": source.effective_to or "",
+        "refresh": source.refresh,
+        "content_kind": source.content_kind,
+        # Snapshot of policy state at build time, so a stored chunk can never
+        # claim approval it did not have when it was indexed.
+        "approved": bool(source.approved),
+    }
+
+
+def _write(docs: list[tuple[str, str, dict]]) -> int:
+    """Embed and store the chunks, replacing whatever was there."""
     if not docs:
         return 0
     ids, texts, metas = zip(*docs)
@@ -201,3 +215,110 @@ def build_index(data_dir: str = "data/raw") -> int:
     bm25._index.cache_clear()
     viz._fit.cache_clear()
     return len(docs)
+
+
+def chunk_source(source: source_policy.Source) -> list[tuple[str, str, dict]]:
+    """(chunk_id, text, metadata) for one approved record."""
+    target = runtime_config.get("chunk_target")
+    overlap = runtime_config.get("chunk_overlap")
+    text = read_document(source.path()) if source.content_kind == "pdf" else source.text()
+    meta = _source_metadata(source)
+    return [
+        (f"{source.id}-{i}", chunk, meta)
+        for i, chunk in enumerate(_chunker()(text, target=target, overlap=overlap))
+    ]
+
+
+def build_from_sources(sources: list[source_policy.Source] | None = None) -> int:
+    """(Re)build the index from approved manifest records. Returns chunk count.
+
+    Passing `sources` explicitly is how the build script feeds an already
+    validated set; the default re-validates, so a stray call can never index an
+    unapproved record.
+    """
+    if sources is None:
+        report = source_policy.load_and_validate()
+        if not report.ok:
+            raise ValueError(
+                "source manifest has fatal problems; refusing to build:\n"
+                + report.summary()
+            )
+        sources = report.approved
+
+    unapproved = [s.id for s in sources if not s.approved]
+    if unapproved:
+        raise ValueError(f"refusing to index unapproved records: {', '.join(unapproved)}")
+
+    docs: list[tuple[str, str, dict]] = []
+    for source in sources:
+        chunks = chunk_source(source)
+        docs.extend(chunks)
+        print(f"  indexed {len(chunks):>3} chunks from {source.id} ({source.canonical_url})")
+    return _write(docs)
+
+
+def build_from_directory(data_dir: str = "data/quarantine") -> int:
+    """DEVELOPMENT ONLY: index a folder of Markdown/PDF with no provenance.
+
+    This is how the corpus used to be built, and it is exactly what the source
+    policy exists to prevent reaching students: no canonical URL, no approval,
+    no hash. It stays because the retrieval pipeline needs *something* to
+    exercise while the approved Ritaj corpus is blocked on authorization — and
+    it refuses to run in production so it cannot become the shipping path by
+    accident.
+    """
+    if production():
+        raise RuntimeError(
+            "build_from_directory is a development path; production indexes only "
+            "approved records from data/sources.yaml"
+        )
+    target = runtime_config.get("chunk_target")
+    overlap = runtime_config.get("chunk_overlap")
+    chunker = _chunker()
+
+    root = Path(data_dir)
+    docs: list[tuple[str, str, dict]] = []
+    for path in sorted(root.rglob("*")):
+        if path.suffix.lower() not in SUPPORTED or path.name.lower() == "readme.md":
+            continue
+        chunks = chunker(read_document(path), target=target, overlap=overlap)
+        meta = {
+            "source": path.stem,
+            "title": path.stem.replace("_", " "),
+            "url": "",
+            "language": "",
+            "owner": "",
+            "as_of": "",
+            "effective_from": "",
+            "effective_to": "",
+            "refresh": "",
+            "content_kind": path.suffix.lstrip(".").lower(),
+            # The flag that stops a dev index being mistaken for a real one:
+            # retrieval and generation both check it before citing a URL.
+            "approved": False,
+        }
+        rel = str(path.relative_to(root))
+        for i, chunk in enumerate(chunks):
+            docs.append((f"{rel}-{i}", chunk, meta))
+        if chunks:
+            print(f"  [dev] indexed {len(chunks):>3} chunks from {path.name}")
+    return _write(docs)
+
+
+def build_index(data_dir: str | None = None) -> int:
+    """Build the index the way this environment is allowed to.
+
+    Approved records when the manifest has any; otherwise the development
+    folder, which raises in production. Keeping one entry point means /admin's
+    "retrain" button and the CLI cannot diverge on which corpus is legitimate.
+    """
+    report = source_policy.load_and_validate()
+    if report.approved:
+        return build_from_sources(report.approved)
+    if production():
+        raise RuntimeError(
+            "no approved sources in data/sources.yaml — a production index cannot "
+            "be built. See data/quarantine/README.md for what is required."
+        )
+    print("No approved sources yet; building the development index instead.")
+    return build_from_directory(data_dir or "data/quarantine")

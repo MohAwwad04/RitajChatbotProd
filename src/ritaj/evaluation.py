@@ -26,7 +26,16 @@ from .ingest import SUPPORTED, chunk_markdown, chunk_text, read_document
 from .llm import chat as llm_chat
 from .retrieve import retrieve
 
-_DATA_DIR = Path("data/raw")
+# The corpus this golden set was written against now lives in data/quarantine/:
+# every one of its documents failed the Ritaj-only source policy (see that
+# folder's README). The set still earns its keep as the *development* eval —
+# it is what proves the retrieval funnel and the grounding guardrail work — but
+# it scores the development corpus, not a releasable one.
+#
+# Phase 3 defines the release evaluation set (100+ bilingual questions, 25
+# calendar/deadline, 20 navigation, 15 unanswerable, 10 personal-data) and it
+# has to be written against approved Ritaj sources, which do not exist yet.
+_DATA_DIR = Path("data/quarantine")
 
 # ---------------------------------------------------------------------------
 # Golden set — questions paired with what a correct system should do.

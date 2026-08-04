@@ -31,7 +31,10 @@ from ritaj.evaluation import (
 from ritaj.generate import GROUNDING_FALLBACK, repair
 from ritaj.guardrails import check_scope
 
-_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
+# The golden set targets the development corpus. Its documents moved to
+# data/quarantine/ when the Ritaj-only source policy excluded all of them —
+# see that folder's README and ritaj.evaluation._DATA_DIR.
+_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "quarantine"
 
 
 # --- Golden / retrieval datasets are well-formed ----------------------------

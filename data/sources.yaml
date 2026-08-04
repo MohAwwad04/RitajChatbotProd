@@ -1,0 +1,142 @@
+# Ritaj-only source manifest — the authoritative list of what may be indexed.
+#
+# Validated by src/ritaj/source_policy.py and enforced by
+# scripts/check_corpus_policy.py in CI. Every production record must satisfy:
+#
+#   canonical_url  https, hostname EXACTLY ritaj.birzeit.edu
+#   visibility     public
+#   approved       true, with approved_by naming a role or ticket
+#   fetched_at     when the snapshot was taken
+#   sha256         hash of the stored snapshot; a mismatch fails the build
+#   content_path   the snapshot file, relative to data/
+#
+# STATUS (4 Aug 2026): every record below is `approved: false` and has no
+# snapshot. This is the review queue, not the corpus. Nothing can be indexed
+# into production yet because no authorized acquisition path exists — direct
+# fetches of ritaj.birzeit.edu return a Cloudflare managed challenge (403),
+# which must not be bypassed. See data/quarantine/README.md.
+#
+# To promote a record:
+#   1. Acquire the page through an authorized path (roadmap §2.3): a Computer
+#      Center export/API, a content-owner export, or a reviewer deliberately
+#      saving the public page. NOT from a search result or cache.
+#   2. Save it under data/snapshots/<corpus-version>/ and set content_path.
+#   3. Set fetched_at, and sha256 (scripts/build_index.py --rehash prints it).
+#   4. Have the owning office confirm the content, then set approved: true and
+#      approved_by to that role or ticket.
+#
+# The URLs below are DISCOVERY CANDIDATES from the roadmap's research (§2.2).
+# Each must be confirmed to exist and be public before approval — an entry here
+# is a question ("is this the right page?"), not an assertion.
+
+- id: registration-instructions-ar
+  canonical_url: https://ritaj.birzeit.edu/reg/instructions
+  title: تعليمات التسجيل
+  language: ar
+  visibility: public
+  content_kind: html
+  owner: registration-office
+  refresh: weekly
+  approved: false
+  notes: >-
+    Registration instructions. Highest-value record for the pilot: it backs the
+    most common question and the primary navigation action.
+  navigation:
+    id: course-registration
+    label_ar: فتح تسجيل المساقات
+    label_en: Open course registration
+    destination: https://ritaj.birzeit.edu/reg/
+    auth_required: true
+
+- id: registration-instructions-en
+  canonical_url: https://ritaj.birzeit.edu/reg/instructions
+  title: Registration instructions
+  language: en
+  visibility: public
+  content_kind: html
+  owner: registration-office
+  refresh: weekly
+  approved: false
+  notes: >-
+    English variant. If Ritaj serves both languages from the same URL, split the
+    snapshot by language and give each variant a distinct canonical_url (or drop
+    this record) — two records may not claim the same URL.
+
+- id: academic-calendar-ar
+  canonical_url: https://ritaj.birzeit.edu/academic-calendar
+  title: التقويم الأكاديمي
+  language: ar
+  visibility: public
+  content_kind: html
+  owner: registration-office
+  refresh: daily
+  approved: false
+  notes: >-
+    Dates drive answers that expire. Set effective_from/effective_to per term so
+    retrieval prefers the currently effective calendar and an old one is only
+    returned when the question names its year.
+  navigation:
+    id: academic-calendar
+    label_ar: فتح التقويم الأكاديمي
+    label_en: Open the academic calendar
+    destination: https://ritaj.birzeit.edu/academic-calendar
+    auth_required: false
+
+- id: academic-calendar-en
+  canonical_url: https://ritaj.birzeit.edu/academic-calendar/en
+  title: Academic calendar
+  language: en
+  visibility: public
+  content_kind: html
+  owner: registration-office
+  refresh: daily
+  approved: false
+  notes: URL unconfirmed — verify the English route before approval.
+
+- id: course-browser
+  canonical_url: https://ritaj.birzeit.edu/hemis/courses
+  title: Course browser
+  language: en
+  visibility: public
+  content_kind: html
+  owner: registration-office
+  refresh: weekly
+  approved: false
+  notes: >-
+    Live per-term offerings (sections, seats, times) change constantly and are
+    better answered by sending the student to the page than by indexing a
+    snapshot of it. Prefer the navigation action; index only stable prose.
+  navigation:
+    id: course-browser
+    label_ar: تصفح المساقات
+    label_en: Browse courses
+    destination: https://ritaj.birzeit.edu/hemis/courses
+    auth_required: true
+
+- id: public-directory
+  canonical_url: https://ritaj.birzeit.edu/register/
+  title: Public directory
+  language: en
+  visibility: public
+  content_kind: html
+  owner: computer-center
+  refresh: monthly
+  approved: false
+  notes: >-
+    Contains staff/student names. Check against the PII rules before approval —
+    a directory listing may be public on Ritaj and still be inappropriate to
+    embed into an assistant's index.
+
+- id: message-boards
+  canonical_url: https://ritaj.birzeit.edu/bzu-msgs/boards
+  title: Message boards
+  language: ar
+  visibility: public
+  content_kind: html
+  owner: student-affairs
+  refresh: daily
+  approved: false
+  notes: >-
+    Announcements age fast and are user-authored, which makes them both the
+    stalest and the most likely injection vector. Index only if a content owner
+    approves ingestion, and keep the daily refresh.
