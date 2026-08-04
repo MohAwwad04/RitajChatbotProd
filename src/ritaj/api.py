@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field
 from . import (
     about, adminauth, answer_checks, bootstrap, budget, chatlog, citations, config,
     corpus, errors, evaluation, generate, grounding, guardrails, ingest, links, llm,
-    ratelimit, readiness, redact, runtime_config, source_policy, viz,
+    navigation, ratelimit, readiness, redact, runtime_config, source_policy, viz,
 )
 from .config import settings
 from .generate import answer, answer_stream, repair
@@ -527,6 +527,29 @@ def _sources(passages) -> list[dict]:
     return out
 
 
+def _navigation_for(req: ChatRequest, passages=None) -> dict | None:
+    """Resolve a reviewed navigation action, revalidating before it goes out.
+
+    The resolver already returns registry entries only, so the second
+    `validate_destination` call is redundant by construction — which is the
+    point. It is the cheap invariant that catches a future edit making the
+    resolver's output less trustworthy, on the one code path where being wrong
+    changes the student's browser rather than just their information.
+    """
+    locale = req.locale or ("ar" if generate.localized("en", "ar", req.message) == "ar" else "en")
+    try:
+        action = navigation.resolve(req.message, passages, locale)
+    except Exception:  # noqa: BLE001 — navigation must never break answering
+        log.exception("navigation resolution failed")
+        return None
+    if not action:
+        return None
+    if navigation.validate_destination(action["url"]) is None:
+        log.error("resolver produced an invalid destination for action %s", action.get("id"))
+        return None
+    return action
+
+
 def _abstain(question: str, log: dict) -> dict:
     """No retrieved source cleared the relevance floor — say so, spend no tokens.
 
@@ -564,7 +587,7 @@ def chat(req: ChatRequest, request: Request):
     scope = guardrails.check_scope(req.message)
     if not scope["allowed"]:
         chatlog.record(req.message, scope["response"], blocked=scope["category"], **_log)
-        return {
+        body = {
             "answer": scope["response"],
             "repaired": False,
             "blocked": scope["category"],
@@ -572,6 +595,12 @@ def chat(req: ChatRequest, request: Request):
             "grounding": {"verdict": "blocked"},
             "links": [],
         }
+        # A refused transaction still deserves the page the student can do it on
+        # themselves — refusing and offering are not in tension.
+        action = _navigation_for(req)
+        if action:
+            body["navigation"] = action
+        return body
     # Conversation memory: retrieval sees a standalone rewrite of follow-ups;
     # generation sees the actual prior turns.
     history = _bounded_history(req)
@@ -608,6 +637,8 @@ def chat(req: ChatRequest, request: Request):
         # Deterministic page links for the cited docs (citation-aware; built from
         # data/links.yaml, never emitted by the model).
         "links": page_links,
+        # Reviewed navigation action, or absent. Never a model-produced URL.
+        **({"navigation": nav} if (nav := _navigation_for(req, passages)) else {}),
     }
 
 
@@ -650,6 +681,10 @@ def chat_stream_route(req: ChatRequest, request: Request):
         if not scope["allowed"]:
             chatlog.record(req.message, scope["response"], blocked=scope["category"], **_log)
             yield f"data: {json.dumps({'type': 'blocked', 'category': scope['category'], 'answer': scope['response']})}\n\n"
+            # A refused transaction still gets the page to do it on.
+            blocked_action = _navigation_for(req)
+            if blocked_action:
+                yield f"data: {json.dumps({'type': 'navigation', 'action': blocked_action})}\n\n"
             yield f"data: {done}\n\n"
             return
 
@@ -700,6 +735,11 @@ def chat_stream_route(req: ChatRequest, request: Request):
             # Page links last (after the answer settles) so they're keyed on the
             # citations actually present in the final text, mirroring grounding.
             yield f"data: {json.dumps({'type': 'links', 'links': links.links_for(passages, final)})}\n\n"
+            # Navigation last of the content events: it is an offer to change
+            # browser state, so it should follow the answer that justifies it.
+            action = _navigation_for(req, passages)
+            if action:
+                yield f"data: {json.dumps({'type': 'navigation', 'action': action})}\n\n"
             chatlog.record(req.message, final, verdict=report.get("verdict"),
                            repaired=repaired, injection=injection["detected"], **_log)
         except errors.PublicError as exc:

@@ -106,7 +106,9 @@ def run_model_free(data: dict) -> int:
         navigation = None
     if navigation is not None:
         for case in (data.get("adversarial_url") or []):
-            if navigation.validate_destination(case["url"]) is None:
+            # validate_destination returns the URL when it may be opened, and
+            # None when it may not. A hostile URL must come back None.
+            if navigation.validate_destination(case["url"]) is not None:
                 print(f"  MISS  accepted {case['url']!r} ({case['why']})")
                 failures += 1
         print(f"  checked {len(data.get('adversarial_url') or [])} case(s)\n")

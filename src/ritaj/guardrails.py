@@ -96,6 +96,36 @@ _PERSONAL_AR = re.compile(
     r"كم\s+علي|كم\s+ادفع"
 )
 
+# --- Scope: transactional requests (ADR-002) --------------------------------
+# "Register COMP233 for me", "pay my fees", "drop this course". These are the
+# requests navigation-only automation exists to decline: acting on them means
+# authenticated writes to student records, which needs Chrome permissions this
+# extension does not request and Birzeit authorization that does not exist.
+#
+# Declined as its own category rather than folded into personal_data, because
+# the right follow-up is different: the assistant can still *open* the page
+# where the student performs the action themselves.
+_TRANSACTION = re.compile(
+    r"\b(register|enroll|sign\s*me\s*up|add|drop|withdraw|pay|submit|apply|book|"
+    r"reserve|cancel)\b[^.?!]{0,40}\b(for|on|to)\s+me\b"
+    r"|\b(register|enroll|add|drop|withdraw)\s+(me\s+)?(for|in|to)\s+[A-Z]{2,5}\s?\d{3,4}\b"
+    r"|\bpay\s+(my|the)\s+(fees?|tuition|balance|installments?)\b"
+    r"|\b(do|complete|finish)\s+(my|the)\s+registration\s+for\s+me\b"
+    r"|سجل\s*(لي|ني)|انزل\s*لي|ادفع\s*(لي|عني)|احذف\s*لي\s*مساق|اسحب\s*لي\s*مساق",
+    re.I,
+)
+_RESPONSE_TRANSACTION = (
+    "I can't register, drop, pay, or submit anything for you — this assistant "
+    "only reads public Ritaj pages and can't act on your account. You can do it "
+    "yourself on Ritaj, and I can open the right page for you."
+)
+_RESPONSE_TRANSACTION_AR = (
+    "لا أستطيع التسجيل أو الحذف أو الدفع أو تقديم أي طلب نيابةً عنك — هذا المساعد "
+    "يقرأ صفحات ريتاج العامة فقط ولا يستطيع التصرف في حسابك. يمكنك القيام بذلك "
+    "بنفسك في ريتاج، وبإمكاني فتح الصفحة المناسبة لك."
+)
+
+
 # --- Scope: harmful / self-harm (coarse v1) ---------------------------------
 # A university assistant shouldn't help with violence/weapons, and self-harm
 # needs a supportive handoff, not a bare refusal. Intentionally narrow to the
@@ -204,6 +234,13 @@ def check_scope(message: str) -> dict:
         return decline("self_harm", _RESPONSE_SELF_HARM, _RESPONSE_SELF_HARM_AR)
     if _HARMFUL.search(text):
         return decline("harmful", _RESPONSE_HARMFUL, _RESPONSE_HARMFUL_AR)
+
+    # Transactional requests: refuse the action, then offer the page. Checked
+    # before the personal-data patterns so "register COMP233 for me" gets the
+    # "I can open registration for you" reply rather than "I can't see your
+    # records", which answers a question the student didn't ask.
+    if _TRANSACTION.search(text):
+        return decline("transaction", _RESPONSE_TRANSACTION, _RESPONSE_TRANSACTION_AR)
 
     # Personal records. A value-lookup ("what is my GPA?") always needs auth. A
     # bare possessive ("my grades") is only personal when the question isn't a

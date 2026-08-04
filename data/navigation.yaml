@@ -1,0 +1,149 @@
+# Navigation action registry — the ONLY destinations this product will open.
+#
+# Validated by src/ritaj/navigation.py at load and by scripts/check_navigation.py
+# in CI. The extension re-validates every URL independently before calling
+# chrome.tabs.create() (chrome-extension/navigation.js), because a backend the
+# extension trusts completely could otherwise steer the browser.
+#
+# Every destination must be:
+#   scheme https, hostname EXACTLY ritaj.birzeit.edu, standard port,
+#   no embedded credentials, no fragment, no path traversal,
+#   and query keys limited to safe_query_keys.
+#
+# The model NEVER produces a URL. The most it can do is name an `id` that
+# already exists here (see ADR-002). An unknown id resolves to nothing.
+#
+# STATUS (4 Aug 2026): every action is `enabled: false`. The destinations are
+# candidates from the roadmap's research; none has been confirmed to exist and
+# be public, and none has a named approver. Enabling one is a deliberate,
+# reviewed act — set `enabled: true` and fill `approved_by` together.
+#
+# `enabled: false` is also the incident rollback: flipping it and redeploying
+# withdraws a bad destination in minutes, without waiting for a Chrome Web Store
+# review of a new extension build.
+#
+# Fields:
+#   id                     stable kebab-case identifier (never reused)
+#   label_ar / label_en    button text the student sees
+#   intents_ar/intents_en  reviewed phrases that resolve to this action
+#   destination            the exact URL to open
+#   auth_required          true if Ritaj will ask the student to sign in
+#   requires_confirmation  true = never navigate without a click (default)
+#   safe_query_keys        query parameters permitted on the destination
+#   min_confidence         intent-match floor before this action is offered
+#   source_ids             data/sources.yaml ids that describe this page
+#   owner / approved_by    who is accountable for it
+
+- id: course-registration
+  label_ar: فتح تسجيل المساقات
+  label_en: Open course registration
+  destination: https://ritaj.birzeit.edu/reg/
+  auth_required: true
+  requires_confirmation: true
+  enabled: false
+  owner: registration-office
+  approved_by: ""
+  min_confidence: 0.75
+  safe_query_keys: []
+  source_ids: [registration-instructions-ar, registration-instructions-en]
+  intents_en:
+    - open course registration
+    - go to registration
+    - open the registration page
+    - where do i register for courses
+    - take me to course registration
+  intents_ar:
+    - افتح تسجيل المساقات
+    - صفحه التسجيل
+    - اذهب الى التسجيل
+    - وين اسجل المساقات
+    - بدي انزل مساقات
+
+- id: academic-calendar
+  label_ar: فتح التقويم الأكاديمي
+  label_en: Open the academic calendar
+  destination: https://ritaj.birzeit.edu/academic-calendar
+  auth_required: false
+  requires_confirmation: true
+  enabled: false
+  owner: registration-office
+  approved_by: ""
+  min_confidence: 0.75
+  safe_query_keys: []
+  source_ids: [academic-calendar-ar, academic-calendar-en]
+  intents_en:
+    - open the academic calendar
+    - show me the academic calendar
+    - go to the calendar page
+  intents_ar:
+    - افتح التقويم الاكاديمي
+    - صفحه التقويم الاكاديمي
+    - اعرض التقويم
+
+- id: course-browser
+  label_ar: تصفح المساقات
+  label_en: Browse courses
+  destination: https://ritaj.birzeit.edu/hemis/courses
+  auth_required: true
+  requires_confirmation: true
+  enabled: false
+  owner: registration-office
+  approved_by: ""
+  min_confidence: 0.75
+  # A term selector is the one parameter worth carrying; anything else on this
+  # URL would be a filter the assistant guessed at.
+  safe_query_keys: [term]
+  source_ids: [course-browser]
+  intents_en:
+    - browse courses
+    - open the course browser
+    - show me the course list
+    - find a course
+  intents_ar:
+    - تصفح المساقات
+    - افتح قائمه المساقات
+    - ابحث عن مساق
+
+- id: message-boards
+  label_ar: فتح لوحات الإعلانات
+  label_en: Open the message boards
+  destination: https://ritaj.birzeit.edu/bzu-msgs/boards
+  auth_required: true
+  requires_confirmation: true
+  enabled: false
+  owner: student-affairs
+  approved_by: ""
+  min_confidence: 0.8
+  safe_query_keys: []
+  source_ids: [message-boards]
+  intents_en:
+    - open the message boards
+    - show announcements
+    - open the boards
+  intents_ar:
+    - افتح لوحات الاعلانات
+    - اعرض الاعلانات
+    - افتح اللوحات
+
+- id: ritaj-home
+  label_ar: فتح بوابة ريتاج
+  label_en: Open the Ritaj portal
+  destination: https://ritaj.birzeit.edu/
+  auth_required: true
+  requires_confirmation: true
+  enabled: false
+  owner: computer-center
+  approved_by: ""
+  # Highest floor of any action: "open Ritaj" is what a weak match degrades
+  # into, so it must never win by default.
+  min_confidence: 0.9
+  safe_query_keys: []
+  source_ids: []
+  intents_en:
+    - open ritaj
+    - go to ritaj
+    - open the ritaj portal
+  intents_ar:
+    - افتح ريتاج
+    - اذهب الى ريتاج
+    - افتح بوابه ريتاج
