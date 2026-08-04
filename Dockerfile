@@ -7,7 +7,24 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     # Model cache baked into the image (below) so cold starts don't re-download
     # the ~2GB embedder + reranker. Kept under /app so it survives in the layer.
-    HF_HOME=/app/.cache/hf
+    HF_HOME=/app/.cache/hf \
+    # Weights are baked in, so runtime must not talk to huggingface.co at all.
+    # Without this, every model load first issues HEAD requests to check for
+    # updates; when the hub is slow or unreachable those calls retry and can
+    # burn minutes of the launch window before a single byte is served.
+    HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1 \
+    HF_HUB_DISABLE_TELEMETRY=1 \
+    # Embedded Qdrant storage. Declared here rather than only as a dashboard
+    # variable, so the container's behaviour is visible in the repo and a fresh
+    # deploy can't miss it. /tmp because the app dir is read-only on HF Spaces.
+    QDRANT_PATH=/tmp/qdrant \
+    ENVIRONMENT=production \
+    # Production serves the prebuilt corpus artifact; embedding at boot is the
+    # slow path that caused the launch timeout.
+    ALLOW_INDEX_BUILD_ON_BOOT=0 \
+    # Two cores, one model copy: keep generation concurrency small.
+    MAX_CONCURRENT_GENERATIONS=2
 
 WORKDIR /app
 
@@ -37,4 +54,12 @@ RUN chmod +x scripts/start.sh && chmod -R 777 /app/.cache
 
 # HF Spaces serves on 7860; start.sh binds uvicorn to $PORT (default 7860).
 EXPOSE 7860
+
+# Liveness only. /ready would report the container unhealthy during the normal
+# warm-up and get it restarted in a loop — exactly the failure mode this
+# deployment is recovering from. Readiness is for withholding traffic, not for
+# deciding whether to kill the process.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD curl -fsS "http://localhost:${PORT:-7860}/live" || exit 1
+
 CMD ["scripts/start.sh"]

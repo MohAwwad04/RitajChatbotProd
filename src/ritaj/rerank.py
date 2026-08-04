@@ -16,14 +16,20 @@ trigger a download until something is actually reranked.
 """
 
 from functools import lru_cache
-
-from sentence_transformers import CrossEncoder
+from typing import TYPE_CHECKING
 
 from .config import settings
 
+if TYPE_CHECKING:
+    from sentence_transformers import CrossEncoder
+
 
 @lru_cache(maxsize=1)
-def _model() -> CrossEncoder:
+def _model() -> "CrossEncoder":
+    # Deferred like embeddings._model: importing sentence_transformers is itself
+    # expensive, and it must not sit between process start and the port binding.
+    from sentence_transformers import CrossEncoder  # noqa: PLC0415
+
     return CrossEncoder(settings.rerank_model)
 
 

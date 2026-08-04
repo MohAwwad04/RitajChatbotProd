@@ -10,29 +10,67 @@ Run:  uvicorn ritaj.api:app --reload --app-dir src
 """
 
 import json
+import logging
 import secrets as _secrets
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
 from fastapi import Body, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import about, adminauth, chatlog, citations, evaluation, generate, grounding, guardrails, ingest, links, runtime_config, viz
+from . import (
+    about, adminauth, bootstrap, chatlog, citations, config, corpus, errors, evaluation,
+    generate, grounding, guardrails, ingest, links, llm, readiness, runtime_config, viz,
+)
 from .config import settings
 from .generate import answer, answer_stream, repair
 from .retrieve import retrieve, trace
 
-app = FastAPI(title="Ritaj Assistant", version="0.1.0")
+log = logging.getLogger("ritaj.api")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Bind the port first; initialize behind it.
+
+    Uvicorn starts accepting connections as soon as this yields, so /live answers
+    within milliseconds of the process starting. Loading the embedder, opening
+    the corpus and warming retrieval all happen on a background thread, and chat
+    reports INITIALIZING until they finish. The previous arrangement — a full
+    index build ahead of `exec uvicorn` — meant nothing listened on the port for
+    minutes, which is what Hugging Face eventually killed as unhealthy.
+    """
+    problems = config.check_production_config()
+    if problems:
+        # Fail closed. A misconfigured production deployment must not start and
+        # look healthy; that is how an open /admin or a wildcard CORS ships.
+        for problem in problems:
+            log.critical("production configuration error: %s", problem)
+        raise RuntimeError(
+            "refusing to start in production with: " + "; ".join(problems)
+        )
+    readiness.mark("listening")
+    if settings.startup_init:
+        readiness.start_background_init(bootstrap.initialize)
+    yield
+
+
+app = FastAPI(title="Ritaj Assistant", version="0.1.0", lifespan=lifespan)
 
 # The chat endpoints are called cross-origin by the Chrome extension (origin
-# chrome-extension://<id>) and potentially by other front-ends on custom
-# domains. No cookies/credentials are used, so a wildcard is safe here.
+# chrome-extension://<id>) and by the deployed web portal. No cookies or
+# credentials are used, but the endpoint spends metered LLM quota, so production
+# takes an explicit allowlist (config.allowed_origins) rather than a wildcard
+# that lets any site on the internet bill this account. Development still
+# resolves to "*" so unpacked extensions — whose origin changes on each reload —
+# keep working.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=config.allowed_origins(),
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
@@ -142,6 +180,36 @@ def _bounded_history(req: ChatRequest) -> list[dict]:
     return turns[-settings.history_max_turns:]
 
 
+@app.exception_handler(errors.PublicError)
+async def _public_error_handler(request: Request, exc: errors.PublicError):
+    """Return the stable code; keep the provider's words in the protected log.
+
+    Raw exception text used to reach the browser, which could leak the upstream
+    endpoint (the Cloudflare account id sits in its path) or a provider error
+    body echoing the prompt.
+    """
+    log.warning("%s %s -> %s", request.method, request.url.path, exc)
+    locale = request.headers.get("accept-language", "en")[:2].lower()
+    headers = {"Retry-After": str(exc.retry_after)} if exc.retry_after else None
+    return JSONResponse(exc.public(locale), status_code=exc.http_status, headers=headers)
+
+
+def _require_ready() -> None:
+    """Refuse chat until initialization finished — with a code, not a dead port.
+
+    A client that receives `503 {"code":"INITIALIZING"}` knows to retry shortly.
+    That is the whole reason readiness is modelled explicitly: during a cold
+    start the service is *temporarily* unable to answer, which is different from
+    being broken, and different again from not listening at all.
+    """
+    if readiness.is_ready() or not settings.startup_init:
+        return
+    state = readiness.state()
+    if state in ("starting", "initializing"):
+        raise errors.INITIALIZING(detail=f"state={state}", retry_after=10)
+    raise errors.NOT_READY(detail=f"state={state}", retry_after=30)
+
+
 # --- Student portal ---------------------------------------------------------
 @app.get("/", include_in_schema=False)
 @app.get("/chat", include_in_schema=False)
@@ -162,9 +230,50 @@ def privacy_page():
     return FileResponse(_STATIC / "privacy.html")
 
 
+@app.get("/live")
+def live():
+    """Liveness: the process is up and serving. Never touches models or the store.
+
+    This is the probe a host should restart on. It must not consult the vector
+    store, load a model, or make a network call — a slow dependency would
+    otherwise be indistinguishable from a dead process, and the platform would
+    kill a container that was merely still warming up.
+    """
+    return {"status": "live", "state": readiness.state()}
+
+
+@app.get("/ready")
+def ready():
+    """Readiness: can this instance actually answer a question right now?
+
+    503 while initializing or failed, so a load balancer withholds traffic
+    without the process being restarted. The body names the state and the
+    startup timings, which is what makes a slow boot diagnosable after the fact.
+    """
+    snap = readiness.snapshot()
+    body = {
+        "status": "ready" if readiness.is_ready() else "not-ready",
+        **snap,
+        "corpus": corpus.summary(),
+        "llm": {"model": settings.llm_model, "circuit": llm.circuit_state()},
+    }
+    if readiness.is_ready():
+        return body
+    return JSONResponse(body, status_code=503)
+
+
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    """Backwards-compatible alias.
+
+    The published extension and the portal both probe /health; it stays until
+    those clients have rolled over. It reports *readiness*, which is what the
+    old single route effectively promised.
+    """
+    if readiness.is_ready():
+        return {"status": "ok", "state": "ready"}
+    return JSONResponse({"status": "unavailable", "state": readiness.state()},
+                        status_code=503)
 
 
 # --- Admin dashboard --------------------------------------------------------
@@ -308,6 +417,7 @@ def _sources(passages) -> list[dict]:
 
 @app.post("/chat")
 def chat(req: ChatRequest):
+    _require_ready()
     _log = dict(user=req.user, session=req.session_id, client=req.client)
     # "Who made this?" — a fixed credit answer with team photos, no retrieval/LLM.
     if about.match(req.message):
@@ -369,6 +479,7 @@ def chat_stream_route(req: ChatRequest):
     Once the full answer is in hand we run the grounding guardrail and send its
     verdict, then a final done event.
     """
+    _require_ready()
     scope = guardrails.check_scope(req.message)
     _log = dict(user=req.user, session=req.session_id, client=req.client)
 
@@ -407,7 +518,11 @@ def chat_stream_route(req: ChatRequest):
                     parts.append(delta)
                     yield delta
 
+            first = True
             for shown in citations.strip_stream(raw_deltas()):
+                if first:
+                    readiness.mark("first_token")
+                    first = False
                 yield f"data: {json.dumps({'type': 'token', 'text': shown})}\n\n"
             draft = "".join(parts)
             report = grounding.check(draft, clean)
@@ -422,10 +537,16 @@ def chat_stream_route(req: ChatRequest):
             yield f"data: {json.dumps({'type': 'links', 'links': links.links_for(passages, final)})}\n\n"
             chatlog.record(req.message, final, verdict=report.get("verdict"),
                            repaired=repaired, injection=injection["detected"], **_log)
-        except Exception as exc:
-            # Emit a clean error event rather than aborting the socket (which the
-            # browser would surface as an opaque "Failed to fetch").
-            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+        except errors.PublicError as exc:
+            # A clean error event rather than aborting the socket (which the
+            # browser surfaces as an opaque "Failed to fetch"). The student gets
+            # the stable code; the provider's actual message stays in the log.
+            log.warning("chat stream failed: %s", exc)
+            yield f"data: {json.dumps({'type': 'error', **exc.public()})}\n\n"
+        except Exception as exc:  # noqa: BLE001 — last line before the socket
+            log.exception("unexpected chat stream failure")
+            internal = errors.INTERNAL(detail=f"{type(exc).__name__}: {exc}")
+            yield f"data: {json.dumps({'type': 'error', **internal.public()})}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     return StreamingResponse(

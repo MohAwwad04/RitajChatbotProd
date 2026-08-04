@@ -11,8 +11,28 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _flag(name: str, default: bool) -> bool:
+    """Read a boolean env var. Anything but 1/true/yes/on is false."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _csv(name: str, default: str = "") -> list[str]:
+    return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
+
+
 class Settings:
-    # LLM (any OpenAI-compatible endpoint: Ollama for dev, vLLM in prod)
+    # Which deployment this is. "production" turns on the fail-closed checks:
+    # admin auth must be configured, CORS must be an explicit allowlist, and the
+    # slow in-process index build is refused. Getting this wrong should make the
+    # service refuse to start, not quietly run a development configuration in
+    # front of students.
+    environment: str = os.getenv("ENVIRONMENT", "development").strip().lower()
+
+    # LLM (any OpenAI-compatible endpoint: Ollama for dev, Cloudflare Workers AI
+    # for the pilot — see docs/adr/ADR-001-llm-provider.md)
     llm_base_url: str = os.getenv("LLM_BASE_URL", "http://localhost:11434/v1")
     llm_api_key: str = os.getenv("LLM_API_KEY", "ollama")
     llm_model: str = os.getenv("LLM_MODEL", "gemma4:e4b")
@@ -62,5 +82,100 @@ class Settings:
     history_max_turns: int = int(os.getenv("HISTORY_MAX_TURNS", "8"))
     history_max_chars: int = int(os.getenv("HISTORY_MAX_CHARS", "1500"))
 
+    # ---- Startup (Phase 1) --------------------------------------------------
+    # Whether the service may embed the corpus in-process at boot. Production
+    # serves a prebuilt corpus artifact (scripts/build_index.py --publish);
+    # building inside the launch window is what caused the Hugging Face
+    # `Launch timed out` failure, so it is off by default outside development.
+    allow_index_build_on_boot: bool = _flag(
+        "ALLOW_INDEX_BUILD_ON_BOOT", os.getenv("ENVIRONMENT", "development") != "production"
+    )
+    # Whether creating the app kicks off background initialization. Always true
+    # in a real deployment; tests and CLI tools that only exercise HTTP routing
+    # set STARTUP_INIT=0 so importing the app doesn't load a 2 GB embedder.
+    startup_init: bool = _flag("STARTUP_INIT", True)
+
+    # ---- Public-service controls (Phase 4) ----------------------------------
+    # Explicit CORS allowlist. The published extension origin
+    # (chrome-extension://<id>) and the deployed web origin belong here; "*" is
+    # refused in production because the chat endpoint costs real LLM quota.
+    cors_origins: list[str] = _csv("CORS_ORIGINS")
+    # Convenience: the Chrome Web Store extension id, expanded into an origin.
+    extension_id: str = os.getenv("EXTENSION_ID", "").strip()
+
+    # Request size limits — the prompt is built from these, so they cap cost.
+    max_message_chars: int = int(os.getenv("MAX_MESSAGE_CHARS", "2000"))
+    max_body_bytes: int = int(os.getenv("MAX_BODY_BYTES", "32768"))
+
+    # Anonymous rate limits, per network bucket and per local session.
+    rate_limit_per_minute: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "10"))
+    rate_limit_per_hour: int = int(os.getenv("RATE_LIMIT_PER_HOUR", "60"))
+    rate_limit_per_day: int = int(os.getenv("RATE_LIMIT_PER_DAY", "150"))
+    # Global cap on simultaneous generations — a 2-core CPU host with one model
+    # copy cannot usefully run more, and unbounded concurrency is how a free
+    # quota disappears in a minute.
+    max_concurrent_generations: int = int(os.getenv("MAX_CONCURRENT_GENERATIONS", "2"))
+    queue_timeout_seconds: float = float(os.getenv("QUEUE_TIMEOUT_SECONDS", "10"))
+
+    # Daily application budget for LLM answers. Kept below the provider's hard
+    # free allowance so the service returns a controlled message instead of the
+    # provider's error. 0 disables the guard.
+    llm_daily_budget: int = int(os.getenv("LLM_DAILY_BUDGET", "180"))
+
+    # ---- Telemetry + retention (Phase 4/8) ----------------------------------
+    # "aggregate" (default): counts, verdicts, latencies — no question/answer
+    # text. "full": raw conversations, permitted only with an explicit opt-in
+    # and a stated retention period.
+    chat_log_mode: str = os.getenv("CHAT_LOG_MODE", "aggregate").strip().lower()
+    chat_log_retention_days: int = int(os.getenv("CHAT_LOG_RETENTION_DAYS", "30"))
+
 
 settings = Settings()
+
+
+def production() -> bool:
+    return settings.environment == "production"
+
+
+def allowed_origins() -> list[str]:
+    """Resolved CORS allowlist for this environment.
+
+    Development keeps the permissive wildcard so local portals and unpacked
+    extensions (whose ids change on every reload) just work. Production requires
+    an explicit list — `check_production_config()` refuses to start without one.
+    """
+    origins = list(settings.cors_origins)
+    if settings.extension_id:
+        origins.append(f"chrome-extension://{settings.extension_id}")
+    if not production() and not origins:
+        return ["*"]
+    return sorted(set(origins))
+
+
+def check_production_config() -> list[str]:
+    """Configuration errors that must prevent a production start. [] = fine.
+
+    Fail-closed: every one of these silently degrades a public deployment into
+    an unsafe one, and each has already been observed in this project's own
+    history (open CORS, an unauthenticated /admin, a Space with no LLM secret).
+    """
+    if not production():
+        return []
+    problems: list[str] = []
+    if not (settings.admin_users or settings.admin_token):
+        problems.append(
+            "no admin authentication configured (set ADMIN_USERS with bcrypt hashes)"
+        )
+    if settings.admin_users and not settings.session_secret:
+        problems.append(
+            "SESSION_SECRET is empty — admin sessions would not survive a restart"
+        )
+    if not allowed_origins():
+        problems.append("CORS_ORIGINS / EXTENSION_ID are empty (no origin may call the API)")
+    if "*" in allowed_origins():
+        problems.append("CORS_ORIGINS contains '*' — not permitted in production")
+    if not settings.llm_api_key or settings.llm_api_key == "ollama":
+        problems.append("LLM_API_KEY is unset or still the Ollama placeholder")
+    if settings.chat_log_mode not in {"aggregate", "full"}:
+        problems.append(f"CHAT_LOG_MODE must be 'aggregate' or 'full', got {settings.chat_log_mode!r}")
+    return problems

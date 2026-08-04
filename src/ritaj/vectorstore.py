@@ -14,22 +14,39 @@ trace already expect (lower = closer), independent of the backend.
 """
 
 import uuid
+from functools import lru_cache
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from .config import settings
 
-def _make_client() -> QdrantClient:
-    # Embedded on-disk mode (QDRANT_PATH) for single-container deploys; otherwise
-    # an http Qdrant server. The ingest pre-process and the API server share the
-    # same path within one container run, so the built index is visible to both.
+
+@lru_cache(maxsize=1)
+def client() -> QdrantClient:
+    """The Qdrant handle, opened on first use.
+
+    Lazy, not module-level, for two reasons. Embedded mode (QDRANT_PATH) takes a
+    lock on the storage directory, so opening at import time would race the
+    startup restore that copies the published corpus artifact into that
+    directory. And importing this module — which api.py does transitively — must
+    never be what makes /live fail.
+    """
     if settings.qdrant_path:
         return QdrantClient(path=settings.qdrant_path)
     return QdrantClient(url=settings.qdrant_url)
 
 
-_client = _make_client()
+def close() -> None:
+    """Release the storage lock (embedded mode) so the directory can be replaced."""
+    if client.cache_info().currsize:
+        try:
+            client().close()
+        except Exception:  # noqa: BLE001 — best effort; we're tearing down anyway
+            pass
+        client.cache_clear()
+
+
 _NS = uuid.UUID("a3f1c0de-0000-4000-8000-000000000000")  # fixed namespace for ids
 
 
@@ -40,9 +57,9 @@ def _point_id(chunk_id: str) -> str:
 def reset(dim: int) -> None:
     """Drop and recreate the collection (used at index build)."""
     # delete + create rather than the deprecated recreate_collection().
-    if _client.collection_exists(settings.collection):
-        _client.delete_collection(settings.collection)
-    _client.create_collection(
+    if client().collection_exists(settings.collection):
+        client().delete_collection(settings.collection)
+    client().create_collection(
         settings.collection,
         vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
     )
@@ -62,12 +79,12 @@ def upsert(
         )
         for cid, doc, emb, meta in zip(ids, documents, embeddings, metadatas)
     ]
-    _client.upsert(settings.collection, points=points)
+    client().upsert(settings.collection, points=points)
 
 
 def query(embedding: list[float], k: int) -> list[tuple[str, float]]:
     """Top-k as (chunk_id, cosine_distance), nearest first."""
-    res = _client.query_points(
+    res = client().query_points(
         settings.collection, query=embedding, limit=k, with_payload=True
     ).points
     return [(p.payload["chunk_id"], 1.0 - p.score) for p in res]
@@ -81,7 +98,7 @@ def get_all() -> list[dict]:
     out = []
     offset = None
     while True:
-        points, offset = _client.scroll(
+        points, offset = client().scroll(
             settings.collection, limit=1000, offset=offset,
             with_payload=True, with_vectors=True,
         )
@@ -99,4 +116,4 @@ def get_all() -> list[dict]:
 
 
 def count() -> int:
-    return _client.count(settings.collection).count
+    return client().count(settings.collection).count

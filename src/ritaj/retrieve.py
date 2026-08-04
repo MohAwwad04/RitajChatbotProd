@@ -14,7 +14,7 @@ The public interface is unchanged — retrieve() still returns (chunk, metadata)
 pairs — so generate.py and api.py don't need to know how retrieval works.
 """
 
-from . import bm25, runtime_config, vectorstore
+from . import bm25, readiness, runtime_config, vectorstore
 from .embeddings import embed_query
 from .rerank import rerank, rerank_scored
 
@@ -53,7 +53,11 @@ def retrieve(question: str, k: int | None = None) -> list[tuple[str, dict]]:
     fused = _rrf([dense_ids, sparse_ids], candidates)
     corpus = bm25.corpus()
     chunks = [corpus[i] for i in fused if i in corpus]
-    return rerank(question, chunks, k)
+    result = rerank(question, chunks, k)
+    # Startup timing: how long after process start the pipeline first produced
+    # passages. Records once (readiness.mark keeps the first value).
+    readiness.mark("first_retrieval")
+    return result
 
 
 # How many candidates each recall stage exposes in the trace (the funnel pulls
