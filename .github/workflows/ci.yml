@@ -26,9 +26,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -53,8 +53,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -100,8 +100,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -139,7 +139,7 @@ jobs:
         continue-on-error: true
         run: pip-audit -r requirements.lock.txt --desc
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: release/sbom.json
@@ -149,12 +149,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: ritaj-student-portal/package-lock.json
+      # This job also runs the packaging and scan scripts, which are Python.
+      # Without this, `python` may not be on PATH at all.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
 
       - name: Install portal dependencies
         working-directory: ritaj-student-portal
@@ -208,8 +213,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -227,7 +232,7 @@ jobs:
       - name: Load scenarios
         run: python scripts/loadtest.py --json load-results.json
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: load-results
@@ -237,11 +242,14 @@ jobs:
     name: Container build
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # The image bakes ~2 GB of model weights, so it is built on pushes to the
-    # long-lived branches rather than on every pull request.
-    if: github.event_name == 'push'
+    # The image bakes ~2 GB of model weights, so it is not built on every pull
+    # request. It IS built on pushes to the long-lived branches and on demand —
+    # a release candidate must be able to verify the container without first
+    # merging it, which is the only point at which the Dockerfile's hashed
+    # install and digest-pinned base are exercised for real.
+    if: github.event_name != 'pull_request'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build image
         run: docker build -t ritaj-assistant:ci .
