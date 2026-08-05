@@ -32,7 +32,7 @@ from collections.abc import Iterator
 
 import httpx
 
-from . import errors, runtime_config
+from . import budget, errors, runtime_config
 from .config import settings
 
 log = logging.getLogger("ritaj.llm")
@@ -157,6 +157,27 @@ def _sleep_before_retry(attempt: int) -> None:
     time.sleep(0.4 * attempt + random.uniform(0, 0.3))
 
 
+def _meter(usage: dict | None, messages: list[dict], produced: str) -> None:
+    """Record what this call cost against the daily budget.
+
+    Metered here, at the only place that talks to the provider, so every caller
+    is counted — including `generate.condense`, whose extra call the previous
+    per-answer accounting missed entirely.
+
+    Cloudflare returns a `usage` block; Ollama and llama.cpp do not, so those
+    fall back to a character-based estimate. An estimate is far better than
+    skipping the call: an unmetered path is how a budget quietly stops binding.
+    """
+    if usage:
+        prompt_tokens = int(usage.get("prompt_tokens") or 0)
+        completion_tokens = int(usage.get("completion_tokens") or 0)
+        if prompt_tokens or completion_tokens:
+            budget.record(prompt_tokens, completion_tokens)
+            return
+    prompt_text = "".join(str(m.get("content", "")) for m in messages)
+    budget.record_estimated(prompt_text, produced)
+
+
 def chat(messages: list[dict], temperature: float | None = None,
          max_tokens: int | None = None) -> str:
     """Send a chat completion request and return the assistant's text.
@@ -173,8 +194,11 @@ def chat(messages: list[dict], temperature: float | None = None,
         try:
             resp = httpx.post(_url(), headers=_headers(), json=payload, timeout=_TIMEOUT)
             resp.raise_for_status()
+            body = resp.json()
             _breaker.record_success()
-            return resp.json()["choices"][0]["message"]["content"]
+            content = body["choices"][0]["message"]["content"]
+            _meter(body.get("usage"), messages, content or "")
+            return content
         except (httpx.HTTPError, KeyError, IndexError, ValueError) as exc:
             transient, public = _classify(exc)
             _breaker.record_failure()
@@ -207,6 +231,8 @@ def chat_stream(
     emitted = False
     last: Exception | None = None
     for attempt in (1, 2):
+        produced: list[str] = []
+        usage: dict | None = None
         try:
             with httpx.stream("POST", _url(), headers=_headers(), json=payload,
                               timeout=_TIMEOUT) as resp:
@@ -218,13 +244,24 @@ def chat_stream(
                     if data == "[DONE]":
                         break
                     try:
-                        delta = json.loads(data)["choices"][0]["delta"].get("content")
-                    except (json.JSONDecodeError, KeyError, IndexError):
+                        chunk = json.loads(data)
+                    except json.JSONDecodeError:
+                        continue
+                    # Cloudflare attaches usage to the final chunk, alongside a
+                    # delta that carries no content — so it has to be read before
+                    # the content check below skips the chunk.
+                    if isinstance(chunk.get("usage"), dict):
+                        usage = chunk["usage"]
+                    try:
+                        delta = chunk["choices"][0]["delta"].get("content")
+                    except (KeyError, IndexError):
                         continue
                     if delta:
                         emitted = True
+                        produced.append(delta)
                         yield delta
             _breaker.record_success()
+            _meter(usage, messages, "".join(produced))
             return
         except (httpx.HTTPError, ValueError) as exc:
             transient, public = _classify(exc)

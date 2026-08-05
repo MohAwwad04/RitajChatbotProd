@@ -69,6 +69,31 @@ def is_ready() -> bool:
     return state() == "ready"
 
 
+# Failure categories. /ready reports the CATEGORY, never the exception message.
+#
+# An exception string is not a safe public field even with the traceback
+# stripped: `RuntimeError("qdrant path /home/user/secret is not writable")` or a
+# provider error carrying the account id in a URL both reach the caller as-is.
+# /ready is an unauthenticated probe on the open internet, so it gets a stable
+# code an operator can look up, and the message goes to the protected log.
+_FAILURE_CATEGORIES: list[tuple[str, tuple[str, ...]]] = [
+    ("CORPUS_UNAVAILABLE", ("corpus", "artifact", "chunks", "sources.yaml", "index")),
+    ("STORE_UNAVAILABLE", ("qdrant", "collection", "vector")),
+    ("MODEL_LOAD_FAILED", ("model", "sentence_transformers", "torch", "weights")),
+    ("LLM_MISCONFIGURED", ("llm_", "api_key", "base_url")),
+    ("STORAGE_UNWRITABLE", ("permission", "read-only", "no space", "writable")),
+]
+
+
+def _categorize(exc: Exception) -> str:
+    """Map an initialization failure to a stable, disclosure-safe code."""
+    haystack = f"{type(exc).__name__} {exc}".lower()
+    for code, needles in _FAILURE_CATEGORIES:
+        if any(needle in haystack for needle in needles):
+            return code
+    return "INITIALIZATION_FAILED"
+
+
 def _set(new_state: State, *, error: str | None = None, **detail) -> None:
     global _state, _error
     with _lock:
@@ -81,15 +106,34 @@ def _set(new_state: State, *, error: str | None = None, **detail) -> None:
         log.info("readiness -> %s", new_state)
 
 
+def failure_code() -> str | None:
+    """The stable category of the initialization failure, if any."""
+    with _lock:
+        return _error
+
+
 def snapshot() -> dict:
-    """Everything /ready reports. Safe to expose: no paths, no secrets."""
+    """Exactly what /ready may report — a public, unauthenticated surface.
+
+    Contains no exception text, no filesystem path, no provider URL, no secret
+    name and no source content. `detail` holds only values this codebase puts
+    there itself (chunk counts, corpus version, timings); it is filtered to
+    scalars so a future initializer returning a rich object cannot leak through.
+    """
     with _lock:
         return {
             "state": _state,
-            "error": _error,
-            "detail": dict(_detail),
+            "code": _error,  # a category from _FAILURE_CATEGORIES, or None
+            "detail": {
+                key: value for key, value in _detail.items()
+                if isinstance(value, (str, int, float, bool, type(None)))
+                or (isinstance(value, dict)
+                    and all(isinstance(v, (str, int, float, bool, type(None)))
+                            for v in value.values()))
+            },
             "timings_ms": dict(_timings),
             "uptime_ms": _elapsed_ms(),
+            "retry_after": 10 if _state in ("starting", "initializing") else 30,
         }
 
 
@@ -113,8 +157,10 @@ def start_background_init(initializer: Callable[[], dict]) -> None:
         try:
             detail = initializer() or {}
         except Exception as exc:  # noqa: BLE001 — boundary: nothing above catches
+            # The full exception and traceback go to the protected log; only the
+            # stable category reaches /ready.
             log.exception("initialization failed")
-            _set("failed", error=f"{type(exc).__name__}: {exc}")
+            _set("failed", error=_categorize(exc))
             return
         mark("index_ready")
         detail["init_seconds"] = round(time.monotonic() - started, 2)

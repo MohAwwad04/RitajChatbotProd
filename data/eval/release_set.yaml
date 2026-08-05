@@ -45,9 +45,57 @@ required_counts:
   personal_data: 10
 
 # --- Corpus-dependent categories: blocked on authorized acquisition ----------
+#
+# `answerable` and `calendar` cannot be written until an approved corpus exists:
+# a question is only "answerable" relative to one, and writing them against the
+# quarantined corpus would produce a suite that passes on material that must
+# never ship. `navigation` is different — it resolves against the reviewed
+# action registry, not the corpus — so it is written below.
 answerable: []
 calendar: []
-navigation: []
+
+# --- Navigation: 20 intents against data/navigation.yaml ---------------------
+#
+# Scored by scripts/eval_release.py against navigation.resolve() with the
+# registry temporarily enabled, so these run today even though every action
+# ships `enabled: false`.
+#
+# `expect: <action-id>` — must resolve to exactly that action.
+# `expect: none`        — must resolve to NO action. These carry the weight:
+#   navigation destination precision is held at 100% because a wrong destination
+#   changes browser state rather than merely telling a student something wrong,
+#   and the way that precision is lost in practice is over-eager matching, not
+#   missed matches.
+navigation:
+  # Direct requests, English
+  - {q: "Open course registration", lang: en, expect: course-registration}
+  - {q: "Take me to course registration please", lang: en, expect: course-registration}
+  - {q: "go to registration", lang: en, expect: course-registration}
+  - {q: "Open the academic calendar", lang: en, expect: academic-calendar}
+  - {q: "show me the academic calendar", lang: en, expect: academic-calendar}
+  - {q: "Browse courses", lang: en, expect: course-browser}
+  - {q: "open the course browser", lang: en, expect: course-browser}
+  - {q: "Open the message boards", lang: en, expect: message-boards}
+  - {q: "open ritaj", lang: en, expect: ritaj-home}
+
+  # Direct requests, Arabic — including dialect and spelling variants that
+  # normalization must fold onto the registry's phrases.
+  - {q: "افتح تسجيل المساقات", lang: ar, expect: course-registration}
+  - {q: "بدي انزل مساقات", lang: ar, expect: course-registration}
+  - {q: "بدّي أنزّل مساقات", lang: ar, expect: course-registration}
+  - {q: "افتح التقويم الأكاديمي", lang: ar, expect: academic-calendar}
+  - {q: "تصفح المساقات", lang: ar, expect: course-browser}
+  - {q: "افتح لوحات الإعلانات", lang: ar, expect: message-boards}
+
+  # Must resolve to NOTHING. Informational questions, ambiguity, and requests
+  # for pages that are not in the registry.
+  - {q: "How much is one credit hour?", lang: en, expect: none}
+  - {q: "ما هو معدل النجاح؟", lang: ar, expect: none}
+  - {q: "What is registration?", lang: en, expect: none}
+  - {q: "Open my grades", lang: en, expect: none}
+  - {q: "افتح صفحة الرسوم", lang: ar, expect: none}
+  - {q: "Open the library catalogue", lang: en, expect: none}
+  - {q: "open something", lang: en, expect: none}
 
 # --- Corpus-independent categories: written and enforceable now --------------
 

@@ -149,14 +149,59 @@ def scan() -> int:
     return hits
 
 
+def scan_zip(path: Path) -> int:
+    """Scan a built extension package.
+
+    Separate from the tracked-file scan because they catch different mistakes:
+    the repo scan catches a secret that was committed, this catches one that was
+    *packaged* — a local config file swept in by a `zip -r`, which then ships to
+    every user and is trivially extracted from the Web Store listing.
+    """
+    if not path.is_file():
+        print(f"  {path.name} not built — run scripts/package_extension.py")
+        return 0
+
+    import zipfile  # noqa: PLC0415
+
+    hits = 0
+    with zipfile.ZipFile(path) as archive:
+        names = archive.namelist()
+        for suspicious in [n for n in names
+                           if n.endswith((".env", ".pem", ".key", ".rtf", ".log"))
+                           or "secret" in n.lower() or n.startswith("store/")
+                           or n.endswith(".test.mjs")]:
+            print(f"  ERROR {path.name} contains {suspicious!r} — it should not ship")
+            hits += 1
+        for name in names:
+            if not name.endswith((".js", ".json", ".html", ".css", ".md", ".txt")):
+                continue
+            try:
+                text = archive.read(name).decode("utf-8", errors="ignore")
+            except KeyError:
+                continue
+            for label, pattern in PATTERNS:
+                for m in pattern.finditer(text):
+                    line = text[: m.start()].count("\n") + 1
+                    print(f"  ERROR {path.name}:{name}:{line}: possible {label}")
+                    hits += 1
+    if not hits:
+        print(f"  {path.name}: {len(names)} entries, no secrets and nothing "
+              "that should not ship")
+    return hits
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--scan-only", action="store_true")
+    ap.add_argument("--zip", type=Path, default=ROOT / "ritaj-assistant-extension.zip",
+                    help="extension package to scan as well")
     args = ap.parse_args()
 
     missing = 0 if args.scan_only else inventory()
     print("\nCommitted-secret scan (tracked files)\n")
     hits = scan()
+    print("\nPackaged-extension scan\n")
+    hits += scan_zip(args.zip)
     sys.exit(1 if hits else (0 if args.scan_only else min(missing, 1)))
 
 

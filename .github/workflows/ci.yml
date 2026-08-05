@@ -106,18 +106,32 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]" pip-audit
 
+      # The dependency lock is what the container installs from. If it drifts
+      # from pyproject.toml, the image ships something nobody reviewed.
+      - name: Dependency lock is current
+        run: |
+          pipx install uv 2>/dev/null || pip install uv
+          python scripts/lock_deps.py --check
+
       - name: Committed-secret scan
         run: python scripts/secret_inventory.py --scan-only
 
       - name: Software bill of materials
         run: python scripts/sbom.py
 
-      # Advisory: a new CVE in a transitive dependency should be visible on
-      # whichever PR happens to run next, but it is not that author's fault and
-      # must not block their merge.
+      - name: Reproducibility (digest-pinned base, hashed dependencies)
+        run: python scripts/sbom.py --check-pinned
+
+      # Audits the locked runtime set — the packages that actually ship —
+      # rather than whatever happens to be in the CI environment.
+      #
+      # Advisory: a CVE published today is not the fault of whoever opens the
+      # next pull request, and blocking their merge on it teaches people to
+      # ignore the job. It is reviewed at release time, where the checklist
+      # makes it blocking.
       - name: Dependency audit (advisory)
         continue-on-error: true
-        run: pip-audit --strict --desc
+        run: pip-audit -r requirements.lock.txt --desc
 
       - uses: actions/upload-artifact@v4
         with:
@@ -140,6 +154,14 @@ jobs:
         working-directory: ritaj-student-portal
         run: npm ci
 
+      # `npm run lint` existed and was cited as a gate, but there was no ESLint 9
+      # flat config, so it exited non-zero on startup and had never checked
+      # anything. It runs before the build because a lint error is cheaper to
+      # read than a bundler failure.
+      - name: Lint portal
+        working-directory: ritaj-student-portal
+        run: npm run lint
+
       # tsc runs as part of the build, so a type error fails here.
       - name: Build portal
         working-directory: ritaj-student-portal
@@ -149,6 +171,61 @@ jobs:
       # implementation of the URL policy, so it carries its own tests.
       - name: Extension validator tests
         run: node --test chrome-extension/navigation.test.mjs
+
+      - name: Build the extension package
+        run: python scripts/package_extension.py --verify
+
+      # Scans the built ZIP as well as tracked files — a local config swept in
+      # by a careless archive command ships to every user.
+      - name: Scan the packaged extension
+        run: python scripts/secret_inventory.py --scan-only
+
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      # Real Chromium, unpacked extension. Headed under xvfb: old headless
+      # Chromium does not run MV3 extension service workers at all, so a
+      # headless run reports a working extension as broken.
+      #
+      # Tested against the PACKAGED artifact, not the source directory, so the
+      # thing verified is the thing submitted.
+      - name: Extension E2E in Chromium
+        run: |
+          mkdir -p /tmp/ext-pkg
+          unzip -q ritaj-assistant-extension.zip -d /tmp/ext-pkg
+          xvfb-run -a node scripts/e2e_extension.mjs /tmp/ext-pkg
+
+  load:
+    name: Load and resilience
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        env:
+          PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # Concurrency cap, queue timeout, both rate-limit buckets, the daily
+      # budget, provider failure and a memory soak — against a stubbed provider,
+      # so it costs no quota. This is what found that the streaming route had
+      # no concurrency cap at all.
+      - name: Load scenarios
+        run: python scripts/loadtest.py --json load-results.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: load-results
+          path: load-results.json
 
   container:
     name: Container build

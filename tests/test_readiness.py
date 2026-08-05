@@ -45,20 +45,71 @@ def test_ready_is_503_until_initialization_completes(reset_readiness):
     assert r.json()["detail"]["chunks"] == 7
 
 
-def test_ready_reports_failure_without_leaking_internals(reset_readiness):
+@pytest.mark.parametrize("message,expected_code", [
+    ("qdrant path /home/user/secret is not writable", "STORE_UNAVAILABLE"),
+    ("no corpus artifact published", "CORPUS_UNAVAILABLE"),
+    ("could not load model weights from the hub", "MODEL_LOAD_FAILED"),
+    ("LLM_API_KEY is not set for a hosted endpoint", "LLM_MISCONFIGURED"),
+    ("something entirely unanticipated", "INITIALIZATION_FAILED"),
+])
+def test_ready_reports_a_stable_category_not_the_exception(reset_readiness, message,
+                                                           expected_code):
     def boom():
-        raise RuntimeError("qdrant path /home/user/secret is not writable")
+        raise RuntimeError(message)
 
     reset_readiness.start_background_init(boom)
     assert reset_readiness.wait_ready(timeout=5) is False
     assert reset_readiness.state() == "failed"
 
     with _client() as c:
-        r = c.get("/ready")
-    assert r.status_code == 503
-    # The operator needs the reason; it is on the protected /ready surface, not
-    # in a student-facing chat response.
-    assert "RuntimeError" in r.json()["error"]
+        response = c.get("/ready")
+    assert response.status_code == 503
+    assert response.json()["code"] == expected_code
+
+
+@pytest.mark.parametrize("secret", [
+    "/home/user/.ssh/id_rsa",
+    "https://api.cloudflare.com/client/v4/accounts/ACCOUNT123SECRET/ai/v1",
+    "hf_zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",  # secret-scan: allow
+    "ADMIN_TOKEN=hunter2000",
+    "student 1191234 could not be found",
+])
+def test_ready_never_echoes_injected_exception_text(reset_readiness, secret):
+    """/ready is an unauthenticated probe on the open internet.
+
+    An exception message is not a safe public field just because the traceback
+    was stripped — initialization failures routinely embed filesystem paths,
+    provider URLs carrying the account id, and secret names.
+    """
+    def boom():
+        raise RuntimeError(f"initialization blew up: {secret}")
+
+    reset_readiness.start_background_init(boom)
+    assert reset_readiness.wait_ready(timeout=5) is False
+
+    with _client() as c:
+        response = c.get("/ready")
+    assert secret not in response.text
+    # Still operationally useful: a category, a state, and retry guidance.
+    assert response.json()["state"] == "failed"
+    assert response.json()["code"]
+    assert response.json()["retry_after"] > 0
+
+
+def test_ready_detail_is_filtered_to_scalars(reset_readiness):
+    """A future initializer returning a rich object must not leak through."""
+    class Leaky:
+        def __repr__(self):
+            return "/home/user/secret/path"
+
+    reset_readiness.start_background_init(lambda: {"chunks": 5, "handle": Leaky()})
+    assert reset_readiness.wait_ready(timeout=5)
+
+    with _client() as c:
+        response = c.get("/ready")
+    assert "secret" not in response.text
+    assert response.json()["detail"]["chunks"] == 5
+    assert "handle" not in response.json()["detail"]
 
 
 def test_health_alias_still_reports_readiness(reset_readiness):

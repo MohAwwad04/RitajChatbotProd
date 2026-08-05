@@ -119,20 +119,52 @@ class Settings:
     max_message_chars: int = int(os.getenv("MAX_MESSAGE_CHARS", "2000"))
     max_body_bytes: int = int(os.getenv("MAX_BODY_BYTES", "32768"))
 
-    # Anonymous rate limits, per network bucket and per local session.
+    # Per-SESSION limits. The session id is client-supplied, so these bound one
+    # conversation rather than one attacker — a hostile client can mint a new id.
     rate_limit_per_minute: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "10"))
     rate_limit_per_hour: int = int(os.getenv("RATE_LIMIT_PER_HOUR", "60"))
     rate_limit_per_day: int = int(os.getenv("RATE_LIMIT_PER_DAY", "150"))
+
+    # Per-NETWORK limits. A client cannot change its address, so this is the
+    # limit that actually holds. Set higher than the session limits because a
+    # campus NAT puts many honest students behind one address — the answer to
+    # shared egress is a separate, larger allowance, not a weaker identity model.
+    network_rate_limit_per_minute: int = int(os.getenv("NETWORK_RATE_LIMIT_PER_MINUTE", "30"))
+    network_rate_limit_per_hour: int = int(os.getenv("NETWORK_RATE_LIMIT_PER_HOUR", "200"))
+    network_rate_limit_per_day: int = int(os.getenv("NETWORK_RATE_LIMIT_PER_DAY", "400"))
+
+    # How many proxies sit in front of this deployment. 0 = ignore
+    # X-Forwarded-For entirely (safe against spoofing; behind a proxy it makes
+    # the network limit effectively global). On Hugging Face Spaces this is
+    # normally 1 — confirm against the host before setting it, because too high
+    # a value lets a client choose its own rate-limit bucket.
+    trusted_proxy_count: int = int(os.getenv("TRUSTED_PROXY_COUNT", "0"))
     # Global cap on simultaneous generations — a 2-core CPU host with one model
     # copy cannot usefully run more, and unbounded concurrency is how a free
     # quota disappears in a minute.
     max_concurrent_generations: int = int(os.getenv("MAX_CONCURRENT_GENERATIONS", "2"))
     queue_timeout_seconds: float = float(os.getenv("QUEUE_TIMEOUT_SECONDS", "10"))
 
-    # Daily application budget for LLM answers. Kept below the provider's hard
-    # free allowance so the service returns a controlled message instead of the
-    # provider's error. 0 disables the guard.
-    llm_daily_budget: int = int(os.getenv("LLM_DAILY_BUDGET", "180"))
+    # Daily application budget, in the unit the provider actually meters.
+    # Cloudflare's free Workers AI allowance is 10,000 neurons/day; 9,000 leaves
+    # headroom so the service returns a controlled message instead of the
+    # provider's error mid-stream. 0 disables the guard (development).
+    #
+    # Counting neurons rather than answers is deliberate — see budget.py. A
+    # request-count budget mis-prices a short question and a six-turn
+    # conversation identically, and the previous one silently missed the second
+    # provider call that every follow-up makes.
+    llm_daily_neuron_budget: int = int(os.getenv("LLM_DAILY_NEURON_BUDGET", "9000"))
+    # Optional coarse safety net on raw provider calls, independent of size.
+    # 0 = off; the neuron budget is the real limit.
+    llm_daily_call_cap: int = int(os.getenv("LLM_DAILY_CALL_CAP", "0"))
+
+    # Neuron cost per million tokens, derived from Cloudflare's published prices
+    # for @cf/google/gemma-4-26b-a4b-it ($0.10/M input, $0.30/M output) at the
+    # Workers Paid rate of $0.011 per 1,000 neurons. Configurable because a
+    # provider price change would otherwise silently invalidate the budget.
+    neurons_per_m_input: int = int(os.getenv("NEURONS_PER_M_INPUT", "9091"))
+    neurons_per_m_output: int = int(os.getenv("NEURONS_PER_M_OUTPUT", "27273"))
 
     # ---- Telemetry + retention (Phase 4/8) ----------------------------------
     # "aggregate" (default): counts, verdicts, latencies — no question/answer

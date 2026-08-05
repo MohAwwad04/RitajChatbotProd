@@ -139,6 +139,31 @@ def check_allowlist_matches_registry() -> int:
     return errors
 
 
+def check_request_limits_match() -> int:
+    """The extension's declared message limit must equal the server's.
+
+    Three sources once disagreed: MAX_MESSAGE_CHARS said 2000 and nothing read
+    it, the request schema said 8000, and the extension had no limit at all. The
+    panel refuses locally so a student gets a sentence instead of a 422 — which
+    is only an improvement while the two numbers agree.
+    """
+    sys.path.insert(0, str(ROOT / "src"))
+    from ritaj.config import settings  # noqa: PLC0415
+
+    source = (EXT / "config.js").read_text(encoding="utf-8")
+    match = re.search(r"MAX_MESSAGE_CHARS\s*=\s*(\d+)", source)
+    if not match:
+        print("  ERROR chrome-extension/config.js does not declare MAX_MESSAGE_CHARS")
+        return 1
+    declared = int(match.group(1))
+    if declared != settings.max_message_chars:
+        print(f"  ERROR config.js MAX_MESSAGE_CHARS={declared} but the server's "
+              f"max_message_chars={settings.max_message_chars}")
+        return 1
+    print(f"  request limits OK — both sides agree on {declared} characters")
+    return 0
+
+
 def check_no_stale_references() -> int:
     """No file still points at the removed popup, and no remote script is loaded."""
     errors = 0
@@ -165,6 +190,8 @@ def main() -> None:
     errors = check_manifest()
     print("\nNavigation allowlist parity\n")
     errors += check_allowlist_matches_registry()
+    print("\nRequest limit parity\n")
+    errors += check_request_limits_match()
     print("\nStatic hygiene\n")
     errors += check_no_stale_references()
 

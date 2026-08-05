@@ -21,10 +21,10 @@ from fastapi import Body, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from . import (
-    about, adminauth, answer_checks, bootstrap, budget, chatlog, citations, config,
+    about, adminauth, answer_checks, bodylimit, bootstrap, budget, chatlog, citations, config,
     corpus, errors, evaluation, generate, grounding, guardrails, ingest, links, llm,
     navigation, ratelimit, readiness, redact, runtime_config, source_policy, viz,
 )
@@ -63,42 +63,37 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="Ritaj Assistant", version="0.1.0", lifespan=lifespan)
 
-# The chat endpoints are called cross-origin by the Chrome extension (origin
-# chrome-extension://<id>) and by the deployed web portal. No cookies or
-# credentials are used, but the endpoint spends metered LLM quota, so production
-# takes an explicit allowlist (config.allowed_origins) rather than a wildcard
-# that lets any site on the internet bill this account. Development still
-# resolves to "*" so unpacked extensions — whose origin changes on each reload —
-# keep working.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=config.allowed_origins(),
-    allow_methods=["GET", "POST"],
-    allow_headers=["*"],
-)
+# --- Middleware ordering ------------------------------------------------------
+# Starlette builds the stack so that the LAST middleware added is the OUTERMOST.
+# The order below is therefore, from outside in:
+#
+#     CORS  ->  request context  ->  body size limit  ->  application
+#
+# CORS must be outermost so that *every* response carries the headers — including
+# the 413 from the body limiter and the 429 from rate limiting. With CORS inside,
+# a browser reports those as an opaque CORS failure and the client can neither
+# display the reason nor honour Retry-After.
+#
+# The body limiter is innermost of the three because it is the only one that
+# needs to sit on the receive channel, and nothing outside it reads the body.
+
+app.add_middleware(bodylimit.BodySizeLimitMiddleware, max_bytes=settings.max_body_bytes)
 
 
 @app.middleware("http")
 async def request_context(request: Request, call_next):
-    """Attach a request id, cap the body, and log the outcome without the content.
+    """Attach a request id and log the outcome without the content.
 
     The id is the join key between what a student can quote ("it said
     LLM_UNAVAILABLE, request 3f2a…") and the protected log line that holds the
     provider's actual error. It is echoed in the response header and in the SSE
     `done` event.
 
-    The body cap runs before parsing: `max_length` on the model bounds each
-    field, but a 50 MB body still has to be read and buffered before validation
-    can reject it.
+    Body size is enforced one layer in (bodylimit.py), on the bytes themselves —
+    a `Content-Length` check here would be skipped entirely by a chunked request.
     """
     request_id = _secrets.token_hex(8)
     request.state.request_id = request_id
-
-    declared = request.headers.get("content-length")
-    if declared and declared.isdigit() and int(declared) > settings.max_body_bytes:
-        err = errors.REQUEST_TOO_LARGE(detail=f"content-length {declared}")
-        return JSONResponse(err.public(), status_code=err.http_status,
-                            headers={"X-Request-ID": request_id})
 
     started = time.monotonic()
     response = await call_next(request)
@@ -107,9 +102,27 @@ async def request_context(request: Request, call_next):
         log.info(
             "chat request_id=%s status=%s ms=%.0f client_ip=%s",
             request_id, response.status_code, (time.monotonic() - started) * 1000,
-            redact.ip(request.client.host if request.client else None),
+            redact.ip(ratelimit.client_ip(request)),
         )
     return response
+
+
+# The chat endpoints are called cross-origin by the Chrome extension (origin
+# chrome-extension://<id>) and by the deployed web portal. No cookies or
+# credentials are used, but the endpoint spends metered LLM quota, so production
+# takes an explicit allowlist (config.allowed_origins) rather than a wildcard
+# that lets any site on the internet bill this account. Development still
+# resolves to "*" so unpacked extensions — whose origin changes on each reload —
+# keep working.
+#
+# Added last, so it wraps everything above.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=config.allowed_origins(),
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+    expose_headers=["X-Request-ID", "Retry-After"],
+)
 
 
 def _supplied_token(request: Request) -> str:
@@ -191,21 +204,44 @@ app.mount("/static", StaticFiles(directory=_STATIC), name="static")
 
 class ChatTurn(BaseModel):
     role: Literal["user", "assistant"]
-    content: str = Field(max_length=8000)
+    content: str
+
+    @field_validator("content")
+    @classmethod
+    def _bound_content(cls, value: str) -> str:
+        if len(value) > settings.max_message_chars:
+            raise ValueError(
+                f"history turn exceeds {settings.max_message_chars} characters"
+            )
+        return value
 
 
 class ChatRequest(BaseModel):
     """The /chat and /v2/chat request body.
 
-    Length bounds are on the model, not checked in the handler, so an oversized
+    Length bounds are validated here, not in the handler, so an oversized
     request is rejected before any of it is used to build a prompt — the prompt
     is what costs money on a metered provider.
+
+    The bound is read from `settings.max_message_chars` at validation time
+    rather than baked into `Field(max_length=...)` at import. There used to be
+    three different answers to "how long may a message be?" — `MAX_MESSAGE_CHARS`
+    said 2000 and was never read, the schema said 8000, and the extension had no
+    limit at all. One setting, consulted everywhere, is the only version of this
+    that stays true.
     """
 
-    message: str = Field(min_length=1, max_length=8000)
+    message: str = Field(min_length=1)
     # Conversation memory: the client sends its prior turns with every request
     # (the server stays stateless — nothing is cached per chat server-side).
     history: list[ChatTurn] = Field(default_factory=list, max_length=50)
+
+    @field_validator("message")
+    @classmethod
+    def _bound_message(cls, value: str) -> str:
+        if len(value) > settings.max_message_chars:
+            raise ValueError(f"message exceeds {settings.max_message_chars} characters")
+        return value
     # Optional client metadata, logged so the admin console can group a
     # conversation's turns and see which client a question came from.
     session_id: str | None = Field(default=None, max_length=100)
@@ -260,8 +296,9 @@ def _admit(request: Request, req: ChatRequest) -> str:
     that will be refused doesn't occupy a slot while being refused.
     """
     _require_ready()
-    client_ip = request.client.host if request.client else None
-    ratelimit.check(client_ip, req.session_id)
+    # Resolved through the configured trusted-proxy chain, not taken raw from
+    # X-Forwarded-For — see ratelimit.client_ip.
+    ratelimit.check(ratelimit.client_ip(request), req.session_id)
     budget.check()
     return getattr(request.state, "request_id", "")
 
@@ -315,12 +352,17 @@ def live():
 
 
 @app.get("/ready")
-def ready():
+def ready(request: Request):
     """Readiness: can this instance actually answer a question right now?
 
     503 while initializing or failed, so a load balancer withholds traffic
     without the process being restarted. The body names the state and the
     startup timings, which is what makes a slow boot diagnosable after the fact.
+
+    Everything here is a *public* surface — an unauthenticated probe on the open
+    internet. `readiness.snapshot()` is therefore sanitized: it carries a stable
+    failure code and category, never the exception text, which can contain
+    filesystem paths, provider URLs with the account id, or a secret name.
     """
     snap = readiness.snapshot()
     body = {
@@ -328,6 +370,9 @@ def ready():
         **snap,
         "corpus": corpus.summary(),
         "llm": {"model": settings.llm_model, "circuit": llm.circuit_state()},
+        # Whether the address used for rate limiting is plausibly the real
+        # client. Silent and expensive in both directions — see ratelimit.py.
+        "client_addressing": ratelimit.client_ip_diagnostics(request),
     }
     if readiness.is_ready():
         return body
@@ -614,7 +659,6 @@ def chat(req: ChatRequest, request: Request):
     started = time.monotonic()
     with ratelimit.generation_slot():
         draft = answer(req.message, clean, history)
-    budget.consume()
     # Ground-check the text the student actually sees, not the pre-repair draft.
     final, report, repaired = generate.finalize(draft, clean, req.message)
     chatlog.record(req.message, final, verdict=report.get("verdict"),
@@ -669,7 +713,30 @@ def chat_stream_route(req: ChatRequest, request: Request):
                 request_id=request_id)
     done = json.dumps({"type": "done", "request_id": request_id})
 
+    # Take a generation slot BEFORE the response starts.
+    #
+    # This route had no concurrency cap at all — it was applied only to /chat,
+    # which almost nothing calls, while the extension uses this one. A load test
+    # against a stub provider found it: eight simultaneous requests against a cap
+    # of two were all served.
+    #
+    # Acquired here rather than inside the generator so that BUSY is a clean 503
+    # the client can retry, instead of an error event arriving after the sources
+    # have already been rendered. Released in the generator's `finally`, which
+    # runs on normal completion and on client disconnect alike.
+    slot = ratelimit.generation_slot()
+    slot.acquire()
+
     def events():
+        try:
+            yield from _stream_events()
+        finally:
+            # Runs on normal completion, on an exception, and on client
+            # disconnect (Starlette closes the generator, raising GeneratorExit).
+            # A slot leaked here would permanently shrink capacity.
+            slot.release()
+
+    def _stream_events():
         # "Who made this?" — fixed credit answer + team photos, then stop.
         if about.match(req.message):
             ans = about.response(req.message)

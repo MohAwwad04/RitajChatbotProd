@@ -15,18 +15,34 @@ pytest -q                                   # backend unit + integration
 node --test chrome-extension/navigation.test.mjs
 python scripts/check_corpus_policy.py       # every chunk traces to an approved Ritaj URL
 python scripts/check_navigation.py          # destinations reviewed; 18 URL attacks rejected
-python scripts/check_extension.py           # minimal permissions; allowlist parity
+python scripts/check_extension.py           # minimal permissions; allowlist + limit parity
 python scripts/check_privacy.py             # disclosures match the code
-python scripts/eval_release.py              # scope refusals, injection, URL rejection
+python scripts/eval_release.py              # refusals, injection, URL + navigation precision
 python scripts/eval_release.py --gate       # release-set completeness
-python scripts/secret_inventory.py          # secrets present; nothing committed
+python scripts/lock_deps.py --check         # dependency lock matches pyproject
+python scripts/secret_inventory.py          # secrets present; nothing committed or packaged
 python scripts/sbom.py --check-pinned       # deployables reproducible
-cd ritaj-student-portal && npm run build
+python scripts/loadtest.py                  # concurrency, limits, budget, soak
+python scripts/package_extension.py --verify   # deterministic ZIP
+node scripts/e2e_extension.mjs              # real Chromium, unpacked extension
+pip-audit -r requirements.lock.txt          # no known vulnerabilities in what ships
+cd ritaj-student-portal && npm run lint && npm run build
 ```
 
-`--gate` currently **fails**: the answerable / calendar / navigation categories
-are empty because they cannot be written against a corpus that does not exist.
-That is the honest blocker, not a formality to waive.
+`--gate` currently **fails**: the `answerable` and `calendar` categories are
+empty because they cannot be written against a corpus that does not exist. That
+is the honest blocker, not a formality to waive. (`navigation` is populated —
+it resolves against the reviewed action registry, not the corpus.)
+
+**Not automated, and must be checked by hand.** Chrome's side panel cannot be
+opened programmatically and Playwright cannot drive one, so
+`node scripts/e2e_extension.mjs` verifies everything behind the icon click but
+not the click itself:
+
+- [ ] Load the unpacked extension, click the toolbar icon, confirm the **side
+      panel** opens (not a popup, not the portal).
+- [ ] Navigate the active tab between pages; confirm the panel stays open and
+      the conversation survives.
 
 ---
 
@@ -35,13 +51,25 @@ That is the honest blocker, not a formality to waive.
 - [ ] Production `/live` returns 200 and `/ready` returns 200.
 - [ ] Three consecutive cold starts succeed inside the host timeout.
       `/ready` reports `timings_ms.listening` — it should be seconds, not minutes.
-- [ ] `python scripts/sbom.py` produced no unresolved critical/high finding.
-- [ ] Base image pinned by digest — currently pinned by tag:
+- [ ] `pip-audit -r requirements.lock.txt` reports no unresolved finding.
+      (Clean as of 2026-08-05: pypdf, torch and setuptools were bumped past
+      PYSEC-2026-3610..3613, PYSEC-2025-194 and PYSEC-2026-3447.)
+- [x] Base image pinned by digest, dependencies installed with
+      `--require-hashes` from `requirements.lock.txt`. Refresh the digest
+      deliberately:
       ```bash
       docker pull python:3.11-slim
       docker inspect --format='{{index .RepoDigests 0}}' python:3.11-slim
-      # put the resulting python@sha256:… in the Dockerfile FROM line
       ```
+- [ ] **The container has actually been built.** No Docker daemon was available
+      when this was written, so the Dockerfile's hashed-install path is verified
+      only by a `pip install --dry-run --require-hashes` against the same lock.
+      The CI `container` job is the first real build — it must be green before
+      release.
+- [ ] Load and resilience numbers recorded (`python scripts/loadtest.py --json`).
+      These are *application* numbers against a stub provider; real first-token
+      and full-answer latency must be measured on staging against Cloudflare
+      before any capacity claim.
 - [ ] `/admin/usage` shows budget, concurrency and circuit state, and someone
       is watching it.
 - [ ] **Rollback rehearsed, not just documented**: point
@@ -70,11 +98,13 @@ That is the honest blocker, not a formality to waive.
 - [ ] No form submission or private-page reading — the extension holds no
       permission that would allow either.
 - [ ] Permissions match the store disclosure (`check_privacy.py`).
-- [ ] Zip built **from the release tag**, checksum recorded in
-      `release/manifest.json`:
+- [ ] Zip built **from the release tag**, deterministically, checksum recorded:
       ```bash
+      python scripts/package_extension.py --verify          # refuses a dirty tree
       python scripts/release_manifest.py --require-clean -o release/manifest.json
       ```
+- [ ] `node scripts/e2e_extension.mjs /tmp/unzipped-package` passes against the
+      **packaged** artifact, not the source directory.
 - [ ] Screenshots show the side panel, not the removed popup.
 
 ## E. Privacy and operations
@@ -92,7 +122,15 @@ That is the honest blocker, not a formality to waive.
       python scripts/set_admins.py
       ```
 - [ ] Support address, incident response, content correction and data-deletion
-      procedures have **named owners**. Human step.
+      procedures have **named owners** — fill in the register in
+      [`docs/OPERATIONS.md`](OPERATIONS.md) §1. Every row is currently blank.
+- [ ] Incident runbook read by the people on call
+      ([`docs/OPERATIONS.md`](OPERATIONS.md) §3).
+- [ ] Rollback drills rehearsed and timed (OPERATIONS §4). A rollback that has
+      never been performed is a plan, not a capability.
+- [ ] `TRUSTED_PROXY_COUNT` confirmed against the host. `/ready` reports
+      `client_addressing.ok` — if false, the network rate limit is either global
+      (every student in one bucket) or client-choosable (no limit at all).
 
 ## F. Staged rollout (roadmap Phase 10)
 

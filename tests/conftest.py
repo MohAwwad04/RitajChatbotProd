@@ -17,7 +17,8 @@ import os
 
 os.environ.setdefault("STARTUP_INIT", "0")
 os.environ.setdefault("ENVIRONMENT", "development")
-os.environ.setdefault("LLM_DAILY_BUDGET", "0")  # budget guard off unless a test sets it
+os.environ.setdefault("LLM_DAILY_NEURON_BUDGET", "0")  # budget guard off unless a test sets it
+os.environ.setdefault("LLM_DAILY_CALL_CAP", "0")
 
 import pytest  # noqa: E402
 

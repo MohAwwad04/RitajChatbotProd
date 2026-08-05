@@ -9,12 +9,27 @@ dependencies = [
     "rank-bm25>=0.2",
     "fastapi>=0.110",
     "uvicorn>=0.29",
-    "pypdf>=4.0",
+    # >=6.14.2 for PYSEC-2026-3610..3613: crafted PDFs cause infinite loops and
+    # unbounded memory in the text-extraction path, which is exactly the path
+    # ingest.read_document takes for a `content_kind: pdf` source snapshot.
+    "pypdf>=6.14.2",
     "python-dotenv>=1.0",
     "httpx>=0.27",
     "pydantic>=2.0",
     "pyyaml>=6.0",
     "bcrypt>=4.0",
+    # Transitive (torch pulls it in) but present in the runtime image, so it is
+    # pinned above PYSEC-2026-3447. The vulnerability itself does not apply —
+    # it affects MANIFEST.in exclusions when building an sdist, which this
+    # project never does — but an unremediated advisory in the SBOM costs a
+    # reviewer time on every audit.
+    "setuptools>=83.0.0",
+    # Direct, though it also arrives via sentence-transformers. Declared here so
+    # [tool.uv.sources] below can pin WHERE it comes from: tool.uv.sources only
+    # applies to a project's own dependencies, so a purely transitive torch
+    # silently resolves to the CUDA build.
+    # >=2.13.0 for PYSEC-2025-194 (memory corruption in torch.jit.script).
+    "torch>=2.13.0",
 ]
 
 [project.optional-dependencies]
@@ -29,3 +44,19 @@ packages = ["src/ritaj"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+
+# Torch resolves to the CUDA build on PyPI for Linux, dragging in ~2 GB of
+# nvidia-* wheels. This deployment is CPU-only (Hugging Face Spaces free tier),
+# so on Linux it comes from PyTorch's CPU index instead. macOS keeps the PyPI
+# wheel, which is already CPU/MPS — the CPU index does not publish macOS builds.
+#
+# Declaring this here rather than as an ad-hoc `pip install --index-url` line in
+# the Dockerfile is what lets uv.lock record the wheels and hashes that actually
+# ship, which is what makes `pip install --require-hashes` possible at all.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]

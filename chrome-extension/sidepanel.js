@@ -11,7 +11,7 @@
 
 import { validateAction } from './navigation.js'
 
-/* global BASE_URL, chrome */
+/* global BASE_URL, MAX_MESSAGE_CHARS, chrome */
 
 // --- i18n --------------------------------------------------------------------
 const STRINGS = {
@@ -26,6 +26,7 @@ const STRINGS = {
       'Independent project — not an official Birzeit service. Confirm anything important on the linked Ritaj page.',
     error: 'Could not reach the assistant. Please check your connection and try again.',
     offline: 'You appear to be offline. The assistant needs a connection to answer.',
+    tooLong: 'That message is too long. Please shorten it to {max} characters or fewer.',
     sources: 'Sources',
     stale: 'may be out of date',
     stopped: 'Stopped.',
@@ -63,6 +64,7 @@ const STRINGS = {
       'مشروع مستقل — ليس خدمة رسمية من جامعة بيرزيت. تأكّد من أي معلومة مهمة على صفحة ريتاج المرتبطة.',
     error: 'تعذّر الوصول إلى المساعد. تحقّق من اتصالك وحاول مرة أخرى.',
     offline: 'يبدو أنك غير متصل بالإنترنت. يحتاج المساعد إلى اتصال للإجابة.',
+    tooLong: 'الرسالة طويلة جداً. يرجى اختصارها إلى {max} حرف أو أقل.',
     sources: 'المصادر',
     stale: 'قد تكون غير محدّثة',
     stopped: 'تم الإيقاف.',
@@ -410,6 +412,13 @@ async function send(preset) {
   const message = (preset ?? input.value).trim()
   if (!message || busy) return
 
+  // Refuse locally rather than spending a round trip on a request the server
+  // will reject. MAX_MESSAGE_CHARS mirrors the server's limit; the two are kept
+  // in step by scripts/check_extension.py.
+  if (message.length > MAX_MESSAGE_CHARS) {
+    showStatus(S().tooLong.replace('{max}', String(MAX_MESSAGE_CHARS)))
+    return
+  }
   if (!navigator.onLine) {
     showStatus(S().offline)
     return

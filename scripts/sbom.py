@@ -29,23 +29,47 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def python_components() -> list[dict]:
-    """Packages from uv.lock (exact, resolved versions)."""
-    lock = ROOT / "uv.lock"
+    """Packages from requirements.lock.txt — the set the image actually installs.
+
+    Read from the hashed lock rather than uv.lock, because uv.lock is the
+    resolution *universe* (every platform, dev extras included) while the lock
+    file is what `pip install --require-hashes` puts in the container. An SBOM
+    listing packages that do not ship is worse than none: it sends a reviewer
+    chasing CVEs in software that is not there, and hides the ones that are.
+
+    Each entry carries its artifact hashes, so the SBOM can be checked against
+    the image rather than trusted.
+    """
+    lock = ROOT / "requirements.lock.txt"
     if not lock.is_file():
         return []
-    text = lock.read_text(encoding="utf-8")
-    components = []
-    # uv.lock is TOML with [[package]] blocks; parsing the two fields we need
-    # avoids a tomllib version dance and a dependency on the exact schema.
-    for block in re.finditer(
-        r'\[\[package\]\]\s*\nname = "([^"]+)"\s*\nversion = "([^"]+)"', text
-    ):
-        components.append({
-            "type": "library",
-            "name": block.group(1),
-            "version": block.group(2),
-            "purl": f"pkg:pypi/{block.group(1)}@{block.group(2)}",
-        })
+
+    components: list[dict] = []
+    current: dict | None = None
+    for raw in lock.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if line.startswith("#") or not line:
+            continue
+        match = re.match(r"^([A-Za-z0-9_.-]+)==([^\s;\\]+)(.*)$", line)
+        if match:
+            name, version, rest = match.groups()
+            marker = rest.split(";", 1)[1].strip().rstrip("\\").strip() if ";" in rest else ""
+            current = {
+                "type": "library",
+                "name": name,
+                "version": version,
+                "purl": f"pkg:pypi/{name}@{version}",
+                "hashes": [],
+            }
+            if marker:
+                # e.g. "sys_platform == 'linux'" — torch ships a different wheel
+                # per platform, and the SBOM should say which.
+                current["scope"] = marker
+            components.append(current)
+            continue
+        hash_match = re.match(r"^--hash=sha256:([0-9a-f]{64})", line)
+        if hash_match and current is not None:
+            current["hashes"].append({"alg": "SHA-256", "content": hash_match.group(1)})
     return components
 
 
@@ -63,13 +87,24 @@ def npm_components() -> list[dict]:
         if not path or not meta.get("version"):
             continue
         name = meta.get("name") or path.split("node_modules/")[-1]
-        components.append({
+        entry = {
             "type": "library",
+            # These are BUILD-time only: what ships is the bundled output in
+            # ritaj-student-portal/dist, not node_modules. They are listed
+            # because a compromised build dependency can poison that output,
+            # but they are not judged by the runtime pinning check.
+            "scope": "build",
             "name": name,
             "version": meta["version"],
             "purl": f"pkg:npm/{name}@{meta['version']}",
-            "scope": "optional" if meta.get("dev") else "required",
-        })
+            "hashes": [],
+        }
+        integrity = meta.get("integrity", "")
+        if integrity.startswith("sha512-"):
+            entry["hashes"].append({"alg": "SHA-512", "content": integrity[len("sha512-"):]})
+        elif integrity.startswith("sha1-"):
+            entry["hashes"].append({"alg": "SHA-1", "content": integrity[len("sha1-"):]})
+        components.append(entry)
     return components
 
 
@@ -127,17 +162,45 @@ def build() -> dict:
 def check_pinned(sbom: dict) -> int:
     """Deployable artifacts must be reproducible. Returns the problem count."""
     problems = 0
+    libraries = 0
+    unhashed: list[str] = []
+
     for component in sbom["components"]:
-        if component["type"] == "container" and not component.get("pinned_by_digest"):
+        kind = component["type"]
+        if kind == "container" and not component.get("pinned_by_digest"):
             print(f"  WARN  base image {component['name']}:{component['version']} is "
                   "pinned by tag, not digest — a rebuild can pull a different image")
             problems += 1
-        if component["type"] == "machine-learning-model" and "unpinned" in component["version"]:
+        if kind == "machine-learning-model" and "unpinned" in component["version"]:
             print(f"  WARN  model {component['name']} has no pinned revision — a "
                   "rebuild can bake different weights")
             problems += 1
+        # Only runtime artifacts are judged here. Build-time npm packages are
+        # listed for supply-chain review but never enter the container.
+        if kind == "library" and component.get("scope") != "build":
+            libraries += 1
+            if not component.get("hashes"):
+                unhashed.append(component["name"])
+
+    if not libraries:
+        print("  WARN  no runtime dependencies found — run scripts/lock_deps.py")
+        problems += 1
+    if unhashed:
+        print(f"  WARN  {len(unhashed)} dependency/dependencies have no artifact hash: "
+              f"{', '.join(unhashed[:5])}")
+        problems += 1
+
+    # A CPU-only image that ships the CUDA stack is both 2 GB larger and a
+    # larger attack surface for no benefit.
+    cuda = [c["name"] for c in sbom["components"]
+            if c["name"].startswith(("nvidia", "triton"))]
+    if cuda:
+        print(f"  WARN  CUDA packages in a CPU-only image: {', '.join(cuda[:5])}")
+        problems += 1
+
     if not problems:
-        print("  all deployable components are pinned")
+        print(f"  all deployable components are pinned "
+              f"({libraries} hashed dependencies, digest-pinned base image)")
     return problems
 
 

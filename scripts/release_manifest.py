@@ -55,6 +55,18 @@ def _sha256(path: Path) -> str | None:
         return None
 
 
+def _base_image() -> str | None:
+    """The Dockerfile's FROM reference, so the manifest names the exact base."""
+    try:
+        text = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    import re  # noqa: PLC0415
+
+    match = re.search(r"^FROM\s+(\S+)", text, re.M)
+    return match.group(1) if match else None
+
+
 def _provider(base_url: str) -> str:
     """Name the LLM host from its base URL — for the manifest and privacy copy.
 
@@ -94,8 +106,20 @@ def build(deployed: bool = False) -> dict:
         ),
         "app": {
             "version": app_version,
+            # Model identity is (repo, revision). The repo name alone resolves to
+            # whatever is on the hub that day, so a rebuild could bake different
+            # weights than the release evaluation was run against — and the
+            # manifest would not show it.
             "embed_model": settings.embed_model,
+            "embed_revision": settings.embed_revision,
             "rerank_model": settings.rerank_model,
+            "rerank_revision": settings.rerank_revision,
+        },
+        "dependencies": {
+            # The hashed runtime lock the container installs from. Its digest
+            # pins the whole dependency set in one value a reviewer can compare.
+            "lock_sha256": _sha256(ROOT / "requirements.lock.txt"),
+            "base_image": _base_image(),
         },
         "commit": {
             "sha": _git("rev-parse", "HEAD"),

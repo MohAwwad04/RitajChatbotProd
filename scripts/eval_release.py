@@ -99,21 +99,123 @@ def run_model_free(data: dict) -> int:
     print(f"  checked {len(data.get('adversarial_source') or [])} case(s)\n")
 
     print("Navigation URL rejection\n")
-    try:
-        from ritaj import navigation
-    except ImportError:
-        print("  navigation module not present yet — skipped")
-        navigation = None
-    if navigation is not None:
-        for case in (data.get("adversarial_url") or []):
-            # validate_destination returns the URL when it may be opened, and
-            # None when it may not. A hostile URL must come back None.
-            if navigation.validate_destination(case["url"]) is not None:
-                print(f"  MISS  accepted {case['url']!r} ({case['why']})")
-                failures += 1
-        print(f"  checked {len(data.get('adversarial_url') or [])} case(s)\n")
+    from ritaj import navigation
 
+    for case in (data.get("adversarial_url") or []):
+        # validate_destination returns the URL when it may be opened, and None
+        # when it may not. A hostile URL must come back None.
+        if navigation.validate_destination(case["url"]) is not None:
+            print(f"  MISS  accepted {case['url']!r} ({case['why']})")
+            failures += 1
+    print(f"  checked {len(data.get('adversarial_url') or [])} case(s)\n")
+
+    failures += score_navigation(data)
     return failures
+
+
+def score_navigation(data: dict) -> int:
+    """Resolve every navigation intent and score destination precision.
+
+    The registry ships with every action `enabled: false` — correctly, because
+    no destination has a human approver yet. That would make every case resolve
+    to nothing and the suite pass vacuously, so the registry is enabled *for the
+    duration of this check*: what is being measured is whether the resolver maps
+    intents to the right action, which is a property of the resolver and the
+    intent phrases, not of the approval state.
+
+    Precision is reported separately from recall because they are not equally
+    serious. A missed match means a student does not get a button. A WRONG match
+    opens a page they did not ask for.
+    """
+    cases = data.get("navigation") or []
+    if not cases:
+        print("Navigation intent resolution\n\n  (no cases yet)\n")
+        return 0
+
+    from ritaj import navigation
+
+    print("Navigation intent resolution\n")
+
+    registry = {action_id: _enabled(action)
+                for action_id, action in _raw_registry().items()}
+
+    resolved_wrong = 0
+    missed = 0
+    for case in cases:
+        expected = case["expect"]
+        with _registry(registry):
+            action = navigation.resolve(case["q"], locale=case.get("lang", "en"))
+        got = action["id"] if action else "none"
+
+        if got == expected:
+            continue
+        if expected == "none" or got != "none":
+            # Either it offered a destination where it should have offered
+            # none, or it offered the wrong one. Both are precision failures.
+            print(f"  WRONG  {case['q']!r} -> {got} (expected {expected})")
+            resolved_wrong += 1
+        else:
+            print(f"  MISS   {case['q']!r} -> none (expected {expected})")
+            missed += 1
+
+    should_resolve = sum(1 for c in cases if c["expect"] != "none")
+    offered = should_resolve - missed
+    precision = 1.0 if (offered + resolved_wrong) == 0 else offered / (offered + resolved_wrong)
+    recall = 1.0 if should_resolve == 0 else offered / should_resolve
+
+    print(f"\n  {len(cases)} case(s): destination precision {precision:.0%}, "
+          f"intent recall {recall:.0%}")
+
+    threshold = (data.get("thresholds") or {}).get("navigation_precision", 1.0)
+    if precision < threshold:
+        print(f"  FAILED precision {precision:.0%} < required {threshold:.0%}")
+        return 1
+    if missed:
+        print(f"  note: {missed} intent(s) matched nothing — a student gets no "
+              "button, which is safe but less useful")
+    print()
+    return 0
+
+
+def _raw_registry():
+    from ritaj import navigation
+    import yaml
+
+    records = yaml.safe_load(navigation.REGISTRY_PATH.read_text(encoding="utf-8")) or []
+    out = {}
+    for record in records:
+        action = navigation.Action(**{
+            k: v for k, v in record.items()
+            if k in navigation.Action.__dataclass_fields__
+        })
+        out[action.id] = action
+    return out
+
+
+def _enabled(action):
+    import dataclasses
+
+    return dataclasses.replace(action, enabled=True, approved_by=action.approved_by or "eval")
+
+
+class _registry:
+    """Temporarily swap in a registry, restoring the real one afterwards."""
+
+    def __init__(self, registry):
+        self.registry = registry
+
+    def __enter__(self):
+        from ritaj import navigation
+
+        self._original = navigation.load_registry
+        navigation.load_registry = lambda *a, **k: self.registry
+        return self
+
+    def __exit__(self, *exc):
+        from ritaj import navigation
+
+        navigation.load_registry = self._original
+        return False
 
 
 def main() -> None:

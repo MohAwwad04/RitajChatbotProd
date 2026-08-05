@@ -297,25 +297,37 @@ def test_oversized_history_is_rejected_before_it_reaches_the_prompt():
     from pydantic import ValidationError
 
     from ritaj.api import ChatRequest
+    from ritaj.config import settings
 
+    over = "x" * (settings.max_message_chars + 1)
     with pytest.raises(ValidationError):
-        ChatRequest(message="q", history=[{"role": "user", "content": "x" * 10_000}])
+        ChatRequest(message="q", history=[{"role": "user", "content": over}])
     with pytest.raises(ValidationError):
         ChatRequest(message="q", history=[{"role": "user", "content": "ok"}] * 60)
     with pytest.raises(ValidationError):
         ChatRequest(message="")
+    with pytest.raises(ValidationError):
+        ChatRequest(message=over)
 
 
 def test_bounded_history_clamps_turns_and_chars():
-    """Second layer: what passes the schema is still clamped to the prompt budget."""
+    """Second layer: what passes the schema is still clamped to the prompt budget.
+
+    The schema bound is the transport limit; `history_max_chars` is the smaller
+    prompt budget, so a request can be perfectly valid and still be trimmed
+    before it reaches the model.
+    """
     from ritaj.api import ChatRequest, _bounded_history
     from ritaj.config import settings
+
+    turn = "x" * settings.max_message_chars
     req = ChatRequest(
         message="q",
-        history=[{"role": "user", "content": "x" * 7_000}] * 30,
+        history=[{"role": "user", "content": turn}] * 30,
     )
     turns = _bounded_history(req)
     assert len(turns) == settings.history_max_turns
+    assert all(len(t["content"]) <= settings.history_max_chars for t in turns)
     assert all(len(t["content"]) <= settings.history_max_chars for t in turns)
 
 
