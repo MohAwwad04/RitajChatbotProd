@@ -15,12 +15,6 @@ ENV PYTHONUNBUFFERED=1 \
     # Model cache baked into the image (below) so cold starts don't re-download
     # the ~2GB embedder + reranker. Kept under /app so it survives in the layer.
     HF_HOME=/app/.cache/hf \
-    # Weights are baked in, so runtime must not talk to huggingface.co at all.
-    # Without this, every model load first issues HEAD requests to check for
-    # updates; when the hub is slow or unreachable those calls retry and can
-    # burn minutes of the launch window before a single byte is served.
-    HF_HUB_OFFLINE=1 \
-    TRANSFORMERS_OFFLINE=1 \
     HF_HUB_DISABLE_TELEMETRY=1 \
     # Embedded Qdrant storage. Declared here rather than only as a dashboard
     # variable, so the container's behaviour is visible in the repo and a fresh
@@ -72,6 +66,19 @@ ARG RERANK_REVISION=953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e
 RUN python -c "from sentence_transformers import SentenceTransformer, CrossEncoder; \
 SentenceTransformer('intfloat/multilingual-e5-large', revision='${EMBED_REVISION}'); \
 CrossEncoder('BAAI/bge-reranker-v2-m3', revision='${RERANK_REVISION}')"
+
+# Offline from here on — set AFTER the bake, not before it.
+#
+# These were originally in the ENV block at the top, which meant the download
+# above ran with the hub already disabled and failed with LocalEntryNotFoundError.
+# The build had never been run, so nothing caught it.
+#
+# At runtime they matter: every model load otherwise issues HEAD requests to
+# huggingface.co to check for updates, and when the hub is slow or unreachable
+# those retries can burn minutes of the launch window before a byte is served —
+# the failure mode this deployment is recovering from.
+ENV HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1
 
 COPY data ./data
 COPY scripts ./scripts

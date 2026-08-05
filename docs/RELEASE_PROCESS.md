@@ -7,10 +7,21 @@ release is reproducible by someone who did not perform the last one.
 
 | Branch | Purpose | Deploys to |
 |---|---|---|
-| `main` | integration; every change arrives by pull request | nothing automatically |
+| `release` | integration **and** what production is built from | production Space, by hand |
+| `main` | **currently stale** — see below | nothing |
 | `roadmap/*`, `feat/*`, `fix/*` | working branches | nothing |
 | `preserve/*` | frozen snapshots kept for provenance; never rebased | nothing |
-| `release` | what production is allowed to be built from | production Space, by hand |
+
+> **`main` lags `release`.** As of 2026-08-05 `main` is a single early commit
+> (`e4f579e`) with no `.github/`, no extension, no portal and no docs; every
+> subsequent change landed on `release`. Pull requests therefore target
+> `release`, and a PR opened against `main` will not even trigger CI, because
+> `main` has no workflow file.
+>
+> Reconcile before the release: either fast-forward `main` from `release` and
+> make it the integration branch as the table above originally intended, or
+> delete `main` and rename `release`. Leaving two branches whose names imply the
+> opposite of their contents is how someone eventually reviews the wrong diff.
 
 Tags: `v<major>.<minor>.<patch>` on `release`. The tag is the rollback unit —
 an artifact is only "a release" if `git tag --points-at HEAD` is non-empty.

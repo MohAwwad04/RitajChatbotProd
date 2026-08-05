@@ -156,15 +156,27 @@ https://mohawwad04-ritaj-rag.hf.space/privacy
 
 ```bash
 git checkout vX.Y.Z
-cd chrome-extension
-zip -r ../ritaj-assistant-extension.zip . \
-  -x '*.DS_Store' 'icons/icon.svg' 'README.md' 'store/*' '*.test.mjs'
-cd .. && shasum -a 256 ritaj-assistant-extension.zip
-python scripts/release_manifest.py -o release/manifest.json   # records that checksum
+python scripts/package_extension.py --verify      # refuses a dirty tree
+python scripts/release_manifest.py -o release/manifest.json   # records the checksum
 ```
 
-Building from the working tree would ship whatever is uncommitted, which cannot
-be reviewed or reproduced later.
+A `zip -r` one-liner produces a *different archive every run* — zip records
+mtimes — so the checksum in the release manifest would mean nothing, and two
+people building the same tag could not compare results. The script sorts
+entries, fixes timestamps and permissions, and `--verify` builds twice to prove
+the output is byte-identical.
+
+It uses an **allowlist** of runtime files rather than an exclusion list, so a
+test file or store draft added later is excluded by default instead of shipping
+because nobody updated a pattern.
+
+Verify the package before submitting — the artifact, not the source directory:
+
+```bash
+python scripts/secret_inventory.py --scan-only    # scans the built ZIP too
+unzip -q ritaj-assistant-extension.zip -d /tmp/pkg
+node scripts/e2e_extension.mjs /tmp/pkg           # 16 checks in real Chromium
+```
 
 ## 8. Updating later
 
