@@ -251,6 +251,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # The Dockerfile COPYs ritaj-student-portal/dist, which is a build output
+      # and therefore gitignored — a fresh checkout does not have it, and the
+      # build fails at that COPY. scripts/deploy_space.py guards the same
+      # requirement with an explicit "build the portal first" error.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ritaj-student-portal/package-lock.json
+      - name: Build the portal the image serves
+        working-directory: ritaj-student-portal
+        run: npm ci && npm run build
+
       - name: Build image
         run: docker build -t ritaj-assistant:ci .
 
