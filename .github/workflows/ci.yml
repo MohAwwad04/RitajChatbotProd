@@ -8,8 +8,14 @@ name: CI
 
 on:
   push:
+    # Working branches are covered by the pull_request trigger below; these two
+    # are the long-lived ones where a direct push still has to be gated.
     branches: [main, release]
   pull_request:
+  # On demand. The release process needs to re-run the gates against a tag
+  # without pushing a commit, and it makes "is CI actually wired up?" a question
+  # with an answer rather than a guess.
+  workflow_dispatch:
 
 permissions:
   contents: read
