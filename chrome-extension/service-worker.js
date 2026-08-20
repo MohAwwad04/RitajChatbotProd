@@ -10,6 +10,10 @@ import { destinationProblem } from './navigation.js'
 // the whole reason for the conversion: a popup closes the moment the student
 // clicks back into the Ritaj page, which is exactly when they are following the
 // instructions it just gave them. A side panel stays open while they navigate.
+//
+// openPanelOnActionClick needs Chrome 116; manifest.json declares that as
+// minimum_chrome_version so an older browser refuses the install outright
+// rather than installing an extension whose toolbar button does nothing.
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel
     .setPanelBehavior({ openPanelOnActionClick: true })
@@ -40,16 +44,28 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return false
   }
 
-  // Reuse an existing Ritaj tab when there is one: students commonly have the
-  // portal open already, and opening a second copy of a login-gated page is
-  // both confusing and slower.
-  chrome.tabs.query({ url: 'https://ritaj.birzeit.edu/*' }, (tabs) => {
-    const existing = tabs?.[0]
-    if (existing?.id != null) {
-      chrome.tabs.update(existing.id, { url: message.url, active: true })
-      if (existing.windowId != null) chrome.windows.update(existing.windowId, { focused: true })
-    } else {
-      chrome.tabs.create({ url: message.url, active: true })
+  // Always a NEW tab. There used to be a chrome.tabs.query({url: ...}) here
+  // that reused an already-open Ritaj tab, which reads as a courtesy and is
+  // actually a permission bug: Chrome gates the `url` filter on tabs.query
+  // behind the "tabs" permission (or host access to the matched pages), and
+  // this extension deliberately requests neither. Without them the filter does
+  // not match — it silently returns [] rather than throwing — so the reuse path
+  // was dead code that made every open look like a fallback.
+  //
+  // Adding "tabs" to get it back would be the wrong trade: it grants the
+  // ability to read the URL and title of every tab the student has open, to buy
+  // a marginal UX nicety on a page they are about to look at anyway. The store
+  // listing promises the extension cannot see their browsing; that promise is
+  // worth more than the reuse.
+  chrome.tabs.create({ url: message.url, active: true }, (tab) => {
+    // Promise rejection is not the failure mode here — the callback form
+    // reports through lastError, and reading it is also what stops Chrome
+    // logging "Unchecked runtime.lastError" into the student's console.
+    const err = chrome.runtime.lastError
+    if (err || !tab) {
+      console.warn('[ritaj] tabs.create failed:', err?.message ?? 'no tab returned')
+      sendResponse({ ok: false, reason: 'open-failed' })
+      return
     }
     sendResponse({ ok: true })
   })

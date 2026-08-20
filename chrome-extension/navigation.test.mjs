@@ -69,6 +69,26 @@ test('only declared query parameters are permitted', () => {
   assert.notEqual(destinationProblem('https://ritaj.birzeit.edu/reg/?next=/x'), null)
 })
 
+test('traversal is rejected on its own, not by the path allowlist', () => {
+  // Regression. `new URL()` resolves `..` while parsing, so a check on
+  // `url.pathname` sees an already-flattened path and never fires. These two
+  // URLs normalize to `/reg`, which IS in ALLOWED_PATHS — so the old check
+  // returned null and the extension would have opened them. The point of the
+  // client validator is that it does not depend on a second rule catching the
+  // case for an unrelated reason.
+  assert.equal(destinationProblem('https://ritaj.birzeit.edu/anything/../reg'), 'path traversal')
+  assert.equal(destinationProblem('https://ritaj.birzeit.edu/a/b/../../reg'), 'path traversal')
+  // The encoded form of the same segment.
+  assert.equal(
+    destinationProblem('https://ritaj.birzeit.edu/reg/%2e%2e/%2e%2e/etc'),
+    'encoded dot in path',
+  )
+  // A single dot segment is equally a re-parse hazard.
+  assert.equal(destinationProblem('https://ritaj.birzeit.edu/./reg'), 'path traversal')
+  // And a legitimate registered path is still accepted.
+  assert.equal(destinationProblem('https://ritaj.birzeit.edu/reg'), null)
+})
+
 test('an over-long URL is rejected before parsing', () => {
   const long = `https://ritaj.birzeit.edu/reg/?${'a'.repeat(600)}`
   assert.notEqual(destinationProblem(long), null)

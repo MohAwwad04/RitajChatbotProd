@@ -44,6 +44,16 @@ export function destinationProblem(rawUrl) {
   if (/[\s\\]/.test(rawUrl)) return 'contains whitespace or a backslash'
   // "//host/path" inherits the current scheme — a classic host-smuggling shape.
   if (rawUrl.startsWith('//')) return 'scheme-relative'
+  // Traversal is judged on the RAW string, before parsing. `new URL()` resolves
+  // `..` during parsing, so the check below on `url.pathname` could never fire:
+  // `/reg/../../etc/passwd` reaches it already flattened to `/etc/passwd`. The
+  // ALLOWED_PATHS lookup was rejecting that case for an unrelated reason, which
+  // is a fine outcome and a bad reason — remove one path from the allowlist and
+  // the traversal defence would have silently gone with it.
+  if (/(^|\/)\.\.?(\/|$)/.test(rawUrl.replace(/^https?:\/\/[^/]*/i, ''))) {
+    return 'path traversal'
+  }
+  if (/%2e/i.test(rawUrl)) return 'encoded dot in path'
 
   let url
   try {
@@ -59,7 +69,6 @@ export function destinationProblem(rawUrl) {
   if (url.port && url.port !== '443') return `port ${url.port}`
   if (url.username || url.password) return 'embedded credentials'
   if (url.hash) return 'fragment'
-  if (url.pathname.includes('..')) return 'path traversal'
 
   const path = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, '') : '/'
   if (!ALLOWED_PATHS.has(path)) return `path ${path} is not registered`

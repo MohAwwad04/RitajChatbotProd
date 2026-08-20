@@ -209,6 +209,37 @@ def problems(action: Action) -> list[str]:
 def reload_registry() -> None:
     load_registry.cache_clear()
     declared_count.cache_clear()
+    registry_version.cache_clear()
+
+
+@lru_cache(maxsize=1)
+def registry_version() -> str:
+    """Short content hash of the ENABLED registry.
+
+    A client (the extension) ships a bundled copy of the destinations so the
+    page-finder keeps working with the backend unreachable. It needs to know
+    whether its copy is the current one, and a file mtime cannot tell it that —
+    a redeploy touches every file, and a rebuilt container has no history.
+
+    Hashing only the fields a client actually renders and validates means a
+    comment edit or a reordered key does not invalidate a correct cache, while
+    any change to a destination, a label or an intent phrase does. Disabled
+    actions are excluded because a client is never told about them.
+    """
+    import hashlib  # noqa: PLC0415
+
+    payload = [
+        (
+            a.id, a.label_ar, a.label_en, a.destination,
+            a.auth_required, a.requires_confirmation,
+            tuple(a.intents_ar), tuple(a.intents_en), a.min_confidence,
+        )
+        for a in sorted(
+            (a for a in load_registry().values() if a.enabled), key=lambda a: a.id
+        )
+    ]
+    digest = hashlib.sha256(repr(payload).encode("utf-8")).hexdigest()
+    return digest[:12]
 
 
 @lru_cache(maxsize=1)
@@ -241,8 +272,29 @@ def get(action_id: str) -> Action | None:
 
 # --- resolution --------------------------------------------------------------
 def _normalize(text: str) -> str:
+    """Fold a question and a reviewed phrase to one comparable form.
+
+    The whitespace collapse is load-bearing, not tidiness. Replacing punctuation
+    with a space turns "open, the academic calendar" into "open  the academic
+    calendar" — two spaces — and the reviewed phrase "open the academic calendar"
+    is then neither equal to it nor contained in it, so a question with a comma
+    in it resolved to nothing at all. Trailing punctuation never showed the bug
+    because `.strip()` hid it, which is why it survived the 22-case eval set.
+
+    Found by tests/test_resolver_parity.py: the JavaScript resolver in the
+    extension collapsed runs and the Python one did not, and the two
+    implementations disagreeing is exactly what that test exists to surface.
+    """
     text = arabic.normalize_light(text or "").lower()
-    return re.sub(r"[^\w\s؀-ۿ]+", " ", text).strip()
+    # Arabic punctuation has to go first. The class below preserves U+0600-U+06FF
+    # so Arabic *letters* survive, but the comma, semicolon and question mark
+    # live in that same block — so «افتح، تسجيل المساقات» kept its comma glued to
+    # the first word and matched nothing. On an Arabic-first product that is the
+    # more damaging half of this bug. (The tashkeel in 0610-061A are already gone
+    # by here: arabic.normalize_light strips them.)
+    text = re.sub(r"[،؍؛؞؟٪٫٬٭۔]+", " ", text)
+    text = re.sub(r"[^\w\s؀-ۿ]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def _intent_match(question: str, action: Action) -> float:

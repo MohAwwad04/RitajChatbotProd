@@ -135,6 +135,29 @@ def test_arabic_matching_survives_diacritics_and_spelling_variants(registry):
     assert navigation.resolve("افتح تسجيل المساقات")["id"] == "course-registration"
 
 
+def test_punctuation_between_words_does_not_break_a_match(registry):
+    """Regression: internal punctuation used to leave a double space.
+
+    `_normalize` replaces a run of punctuation with one space, so a comma
+    *between* words produced "open  course registration" — and the reviewed
+    phrase was then neither equal to nor contained in it, so the question
+    resolved to nothing. Trailing punctuation always worked because `.strip()`
+    removed the evidence, which is how this survived the 22-case eval set.
+    """
+    for question in [
+        "open, course registration!",
+        "open... course registration",
+        "open — course registration",
+        "افتح، تسجيل المساقات",
+    ]:
+        resolved = navigation.resolve(question)
+        assert resolved is not None, question
+        assert resolved["id"] == "course-registration", question
+
+    # And the plain form is unchanged.
+    assert navigation.resolve("open course registration")["id"] == "course-registration"
+
+
 def test_an_ordinary_question_gets_no_action(registry):
     assert navigation.resolve("How much is one credit hour?") is None
     assert navigation.resolve("ما هو معدل النجاح؟") is None

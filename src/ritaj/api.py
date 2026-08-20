@@ -446,6 +446,11 @@ def capabilities():
             for a in actions
         ],
         "pending_navigation": navigation.declared_count() - len(actions),
+        # Per-feature readiness. A single `ready` boolean forced every client to
+        # treat the whole product as one thing, so an absent corpus took the
+        # page-finder down with it even though finding a page needs neither a
+        # corpus nor a model. Clients degrade feature by feature off this block.
+        "modes": _capability_modes(),
         # Stated positively so the portal renders the limits from the same
         # source of truth the guardrail enforces, rather than from UI copy.
         "limits": {
@@ -455,6 +460,117 @@ def capabilities():
             "navigation_needs_confirmation": True,
         },
     }
+
+
+def _capability_modes() -> dict:
+    """Readiness split into the capabilities a client can use independently.
+
+    `ready` (full factual chat) is the AND of the parts, so it keeps its old
+    meaning for older clients. The parts are what let a new client keep working
+    when only some of the system is up:
+
+      live             the process answers. No dependency is consulted.
+      navigation_ready an approved destination exists. Registry only — no vector
+                       store, no embedder, no provider, so this stays true
+                       through a corpus rebuild, a model outage and an exhausted
+                       quota. It is the capability that survives.
+      retrieval_ready  initialization finished, so the store and embedder work.
+      generation_ready the provider is configured and neither the circuit
+                       breaker nor the daily budget is refusing calls.
+    """
+    navigation_ready = any(a.enabled for a in navigation.load_registry().values())
+    retrieval_ready = readiness.is_ready()
+    # A missing key is the honest "not configured" case: production refuses to
+    # start without one, but development and a mis-set Space would both reach
+    # here, and a client should be told generation is unavailable rather than
+    # discovering it one 500 at a time.
+    generation_ready = bool(settings.llm_api_key) and llm.circuit_state() != "open"
+    if generation_ready:
+        try:
+            budget.check()
+        except errors.PublicError:
+            generation_ready = False
+    return {
+        "live": True,
+        "navigation_ready": navigation_ready,
+        "retrieval_ready": retrieval_ready,
+        "generation_ready": generation_ready,
+        "ready": retrieval_ready and generation_ready,
+    }
+
+
+# --- Navigation (independent of corpus, model and quota) --------------------
+#
+# These two routes are the reason the extension stays useful during an outage.
+# They deliberately do NOT call _require_ready(): a reviewed destination is a
+# fact about data/navigation.yaml, which is loaded at import and needs no vector
+# store, no embedder and no provider. Gating them on full readiness is what made
+# the flagship page-finder die whenever the corpus or the model was unavailable
+# — which is most of the time, by design, until an approved corpus exists.
+#
+# Rate limiting still applies (they are public and unauthenticated); the daily
+# neuron budget does not, because nothing here reaches a metered provider.
+class NavigationResolveRequest(BaseModel):
+    """A question to match against the reviewed intent phrases."""
+
+    message: str = Field(min_length=1)
+    locale: Literal["ar", "en"] | None = None
+    session_id: str | None = Field(default=None, max_length=100)
+
+    @field_validator("message")
+    @classmethod
+    def _bound_message(cls, value: str) -> str:
+        if len(value) > settings.max_message_chars:
+            raise ValueError(f"message exceeds {settings.max_message_chars} characters")
+        return value
+
+
+@app.get("/v2/navigation/actions")
+def navigation_actions(request: Request):
+    """Every enabled destination, for a client to render and to cache offline.
+
+    The extension bundles its own copy of this list so the page-finder works
+    with the backend entirely unreachable. This route is the fresher answer when
+    the network is available — flipping `enabled: false` here withdraws a bad
+    destination in one redeploy, without waiting on a Chrome Web Store review.
+    That is the incident rollback for a bad URL, so it must not be gated on
+    anything that can itself be broken.
+    """
+    ratelimit.check(ratelimit.client_ip(request), None)
+    actions = [a for a in navigation.load_registry().values() if a.enabled]
+    return {
+        # A client compares this to its bundled copy and prefers the newer.
+        "version": navigation.registry_version(),
+        "actions": [
+            {
+                "id": a.id,
+                "label_ar": a.label_ar,
+                "label_en": a.label_en,
+                "url": a.destination,
+                "auth_required": a.auth_required,
+                "requires_confirmation": a.requires_confirmation,
+                "intents_ar": a.intents_ar,
+                "intents_en": a.intents_en,
+                "min_confidence": a.min_confidence,
+            }
+            for a in actions
+        ],
+        "pending": navigation.declared_count() - len(actions),
+    }
+
+
+@app.post("/v2/navigation/resolve")
+def navigation_resolve(req: NavigationResolveRequest, request: Request):
+    """Match a question to one reviewed action, or to nothing.
+
+    Nothing is the common and correct answer. The resolver is pure phrase
+    containment over reviewed strings (navigation._intent_match), so the model
+    is not involved and cannot be: the most this route can return is an id a
+    human already approved, which is the ADR-002 rule stated as an endpoint.
+    """
+    ratelimit.check(ratelimit.client_ip(request), req.session_id)
+    action = navigation.resolve(req.message, None, req.locale or "en")
+    return {"action": action, "version": navigation.registry_version()}
 
 
 # --- Admin dashboard --------------------------------------------------------

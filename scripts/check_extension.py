@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
@@ -185,11 +186,77 @@ def check_no_stale_references() -> int:
     return errors
 
 
+def check_bundled_actions_current() -> int:
+    """The offline registry the extension ships must match data/navigation.yaml.
+
+    chrome-extension/actions.generated.js is what the page-finder falls back to
+    when the backend is unreachable, so a stale copy would keep offering a
+    destination after it was withdrawn — precisely defeating the server-side
+    kill switch that exists so a bad URL can be pulled without a Store review.
+    """
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "sync_extension_actions.py"), "--check"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    output = (result.stdout + result.stderr).strip()
+    for line in output.splitlines():
+        print(f"  {line}")
+    return 0 if result.returncode == 0 else 1
+
+
+def check_source_link_hosts() -> int:
+    """Every host data/links.yaml cites must be in the extension's link policy.
+
+    chrome-extension/links.js validates citations against an exact host set. If
+    the curated map gains a host the extension does not know, the panel silently
+    drops that citation — the answer keeps its claim and loses its evidence,
+    which is the worst of the available failures.
+    """
+    links_yaml = ROOT / "data" / "links.yaml"
+    policy = EXT / "links.js"
+    if not links_yaml.exists() or not policy.exists():
+        print("  ERROR data/links.yaml or chrome-extension/links.js is missing")
+        return 1
+
+    block = re.search(r"OFFICIAL_HOSTS\s*=\s*new Set\(\[(.*?)\]\)", policy.read_text(
+        encoding="utf-8"), re.S)
+    if not block:
+        print("  ERROR could not find OFFICIAL_HOSTS in links.js")
+        return 1
+    allowed = set(re.findall(r"'([^']+)'", block.group(1)))
+
+    cited = set()
+    for url in re.findall(r'url:\s*"([^"]+)"', links_yaml.read_text(encoding="utf-8")):
+        host = (urlparse(url).hostname or "").lower()
+        if host:
+            cited.add(host)
+
+    missing = sorted(cited - allowed)
+    for host in missing:
+        print(f"  ERROR data/links.yaml cites {host!r}, which links.js will reject")
+    if missing:
+        return len(missing)
+
+    unused = sorted(allowed - cited)
+    for host in unused:
+        # Not an error: a host may be allowed ahead of the map gaining an entry.
+        # Worth printing so an over-broad allowlist is visible in the log.
+        print(f"  note  links.js allows {host!r}, which the map does not currently cite")
+    print(f"  link hosts OK — {len(cited)} cited host(s), all permitted")
+    return 0
+
+
 def main() -> None:
     print("Extension manifest\n")
     errors = check_manifest()
     print("\nNavigation allowlist parity\n")
     errors += check_allowlist_matches_registry()
+    print("\nBundled offline registry\n")
+    errors += check_bundled_actions_current()
+    print("\nSource link host parity\n")
+    errors += check_source_link_hosts()
     print("\nRequest limit parity\n")
     errors += check_request_limits_match()
     print("\nStatic hygiene\n")
