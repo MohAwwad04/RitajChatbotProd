@@ -171,7 +171,12 @@ PRODUCTION_REQUIRED = ["LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "CORS_ORIGINS
 
 def _push_configuration(space_id: str, token: str, *, production: bool) -> None:
     """Set every provided secret and variable on the Space before uploading."""
-    from huggingface_hub import add_space_secret, add_space_variable  # noqa: PLC0415
+    from huggingface_hub import (  # noqa: PLC0415
+        add_space_secret,
+        add_space_variable,
+        delete_space_secret,
+        delete_space_variable,
+    )
 
     if production:
         missing = [k for k in PRODUCTION_REQUIRED if not os.environ.get(k)]
@@ -188,15 +193,36 @@ def _push_configuration(space_id: str, token: str, *, production: bool) -> None:
                   "shell and re-run. See SETUP_LIVE.md."
             )
 
+    # Hugging Face refuses to start a Space where one name exists as BOTH a
+    # variable and a secret ("Collision on variables and secrets names"), and it
+    # reports that only as CONFIG_ERROR after the upload. This Space was first
+    # configured for a different provider in July, so several names were left in
+    # the opposite namespace to the one they belong in now — LLM_BASE_URL in
+    # particular moved to secrets once it started carrying the account id.
+    #
+    # So each name is cleared from the namespace it must NOT be in, immediately
+    # before being written to the one it must. Deliberately narrow: a name is
+    # only ever removed from the wrong side, never from the side it is about to
+    # be written to, so nothing whose value we do not hold is destroyed.
+    def _clear_opposite(name: str, *, wanted: str) -> None:
+        remove = delete_space_variable if wanted == "secret" else delete_space_secret
+        try:
+            remove(space_id, name, token=token)
+            print(f"  cleared stale {'variable' if wanted == 'secret' else 'secret'} {name}")
+        except Exception:  # noqa: BLE001 — absent is the normal case, and fine
+            pass
+
     set_secrets, set_variables = [], []
     for name in SPACE_SECRETS:
         value = os.environ.get(name)
         if value:
+            _clear_opposite(name, wanted="secret")
             add_space_secret(space_id, name, value, token=token)
             set_secrets.append(name)
     for name in SPACE_VARIABLES:
         value = os.environ.get(name)
         if value:
+            _clear_opposite(name, wanted="variable")
             add_space_variable(space_id, name, value, token=token)
             set_variables.append(name)
 
