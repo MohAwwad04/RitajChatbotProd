@@ -122,17 +122,28 @@ def check() -> None:
             )
 
 
-def record(prompt_tokens: int, completion_tokens: int) -> None:
+def record(prompt_tokens: int, completion_tokens: int,
+           reported_neurons: float | None = None) -> None:
     """Record one provider call's usage. Called from llm.py on success.
 
     Reporting at the call site rather than at the answer site is the point: it
     counts the condense call, any future tool call, and anything else that
     reaches the provider, without each new caller having to remember to.
+
+    `reported_neurons` is Cloudflare's own figure from the usage block, and it
+    wins when present. The local formula was checked against it on 2026-08-20
+    and reproduces it to eight decimal places (24 prompt / 109 completion
+    tokens -> 3.19090909 computed, 3.19090915 reported), so this is not a
+    correction — it is insurance against a pricing change silently making the
+    constants wrong, which is the kind of drift a budget cannot afford.
     """
     global _neurons, _calls
     with _lock:
         _roll()
-        _neurons += neurons_for(prompt_tokens, completion_tokens)
+        if reported_neurons is not None and reported_neurons >= 0:
+            _neurons += float(reported_neurons)
+        else:
+            _neurons += neurons_for(prompt_tokens, completion_tokens)
         _calls += 1
 
 

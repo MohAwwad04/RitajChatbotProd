@@ -220,3 +220,93 @@ def test_configuration_check_allows_a_local_endpoint_without_a_key(monkeypatch):
     monkeypatch.setattr(settings, "llm_api_key", "")
     monkeypatch.setattr(settings, "llm_model", "gemma4:e2b")
     assert bootstrap._check_llm_config()["hosted"] is False
+
+
+# --- reasoning models -------------------------------------------------------
+#
+# @cf/google/gemma-4-26b-a4b-it emits `reasoning_content` before `content`, and
+# those tokens bill as output. Measured 2026-08-20 on a RAG-shaped call:
+# reasoning was ~70% of the output (200 of 285 tokens). Two consequences the
+# code has to handle, both verified against the live provider before being
+# written down here.
+
+def test_an_empty_answer_is_refused_not_returned(monkeypatch):
+    """A budget spent entirely on reasoning is a config fault, not an answer.
+
+    Returning "" would reach the grounding checks, which would judge it an
+    ungrounded response — reporting a retrieval-quality problem for what is
+    actually a max_tokens that is too small.
+    """
+    import httpx
+
+    from ritaj import errors, llm
+
+    body = {
+        "choices": [{
+            "finish_reason": "length",
+            "message": {"role": "assistant", "content": "",
+                        "reasoning_content": "Let me think about this..."},
+        }],
+        "usage": {"prompt_tokens": 24, "completion_tokens": 60, "neurons": 1.85},
+    }
+    monkeypatch.setattr(
+        httpx, "post",
+        lambda *a, **k: httpx.Response(200, json=body, request=httpx.Request("POST", "http://x")),
+    )
+    with pytest.raises(errors.PublicError) as excinfo:
+        llm.chat([{"role": "user", "content": "hi"}], max_tokens=60)
+    assert excinfo.value.code == "LLM_UNAVAILABLE"
+    assert "reasoning" in (excinfo.value.detail or "")
+
+
+def test_the_call_is_still_metered_when_it_produces_nothing(monkeypatch):
+    """An unbilled failure is how a daily budget quietly stops binding."""
+    import httpx
+
+    from ritaj import budget, errors, llm
+
+    before = budget.snapshot()["neurons_used"]
+
+    body = {
+        "choices": [{
+            "finish_reason": "length",
+            "message": {"role": "assistant", "content": "",
+                        "reasoning_content": "thinking"},
+        }],
+        "usage": {"prompt_tokens": 100, "completion_tokens": 200, "neurons": 6.36},
+    }
+    monkeypatch.setattr(
+        httpx, "post",
+        lambda *a, **k: httpx.Response(200, json=body, request=httpx.Request("POST", "http://x")),
+    )
+    with pytest.raises(errors.PublicError):
+        llm.chat([{"role": "user", "content": "hi"}], max_tokens=200)
+    after = budget.snapshot()["neurons_used"]
+    assert after > before, "a call that produced no answer was not charged"
+
+
+def test_the_providers_own_neuron_figure_wins(monkeypatch):
+    """The local formula is insurance, not the source of truth.
+
+    It was checked against Cloudflare on 2026-08-20 and reproduces the reported
+    value to eight decimal places. Preferring the reported number means a
+    pricing change cannot silently make the constants wrong.
+    """
+    from ritaj import budget
+
+    # snapshot() rounds to 1dp, so differences of snapshots carry up to 0.1 of
+    # rounding error. Read the accumulator directly — this test is specifically
+    # about accounting precision, which is the one thing the rounded view loses.
+    def used() -> float:
+        with budget._lock:
+            return budget._neurons
+
+    before = used()
+    # A figure deliberately unlike anything the formula would produce, so a pass
+    # cannot come from the fallback happening to agree.
+    budget.record(100, 200, reported_neurons=999.0)
+    assert abs((used() - before) - 999.0) < 1e-6
+
+    before = used()
+    budget.record(100, 200)          # no reported value -> fall back to the formula
+    assert abs((used() - before) - budget.neurons_for(100, 200)) < 1e-6

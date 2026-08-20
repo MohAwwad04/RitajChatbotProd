@@ -171,11 +171,41 @@ def _meter(usage: dict | None, messages: list[dict], produced: str) -> None:
     if usage:
         prompt_tokens = int(usage.get("prompt_tokens") or 0)
         completion_tokens = int(usage.get("completion_tokens") or 0)
+        # Cloudflare reports the exact neuron cost; pass it through so the daily
+        # budget cannot drift from the provider's own accounting.
+        reported = usage.get("neurons")
         if prompt_tokens or completion_tokens:
-            budget.record(prompt_tokens, completion_tokens)
+            budget.record(prompt_tokens, completion_tokens,
+                          float(reported) if reported is not None else None)
             return
     prompt_text = "".join(str(m.get("content", "")) for m in messages)
     budget.record_estimated(prompt_text, produced)
+
+
+def _require_answer(choice: dict, max_tokens: int) -> None:
+    """Refuse to return an empty answer that the provider charged for.
+
+    `@cf/google/gemma-4-26b-a4b-it` is a reasoning model: it emits
+    `reasoning_content` before `content`, and those tokens bill as output. On a
+    measured RAG-shaped call, reasoning was about 70% of the output (200 of 285
+    tokens). So a `max_tokens` that looks generous for an answer can be spent
+    entirely on thinking, and the provider then returns 200 OK with
+    `content: ""` — a silently empty answer that the grounding checks downstream
+    would treat as an ungrounded response rather than as a configuration fault.
+
+    Verified 2026-08-20: max_tokens=60 on a trivial prompt returned 60
+    completion tokens and empty content.
+    """
+    message = choice.get("message") or {}
+    if (message.get("content") or "").strip():
+        return
+    reasoning = (message.get("reasoning_content") or "").strip()
+    if reasoning and choice.get("finish_reason") == "length":
+        raise errors.LLM_UNAVAILABLE(
+            detail=(f"model spent its entire {max_tokens}-token output budget on "
+                    "reasoning and returned no answer — raise max_tokens")
+        )
+    raise errors.LLM_UNAVAILABLE(detail="provider returned an empty answer")
 
 
 def chat(messages: list[dict], temperature: float | None = None,
@@ -196,8 +226,12 @@ def chat(messages: list[dict], temperature: float | None = None,
             resp.raise_for_status()
             body = resp.json()
             _breaker.record_success()
-            content = body["choices"][0]["message"]["content"]
+            choice = body["choices"][0]
+            content = choice["message"]["content"]
+            # Meter FIRST: the call cost neurons whether or not it produced an
+            # answer, and an unbilled failure is how a budget stops binding.
             _meter(body.get("usage"), messages, content or "")
+            _require_answer(choice, max_tokens)
             return content
         except (httpx.HTTPError, KeyError, IndexError, ValueError) as exc:
             transient, public = _classify(exc)

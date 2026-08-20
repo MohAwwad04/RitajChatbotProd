@@ -92,7 +92,13 @@ SPEC: list[dict] = [
     {"key": "temperature", "label": "LLM temperature", "type": "float",
      "min": 0.0, "max": 1.5, "step": 0.05, "group": "Generation", "requires": "live",
      "help": "Lower = more faithful/deterministic. 0.2 suits a grounded assistant."},
-    {"key": "max_tokens", "label": "Max answer tokens", "type": "int", "min": 128, "max": 4096,
+    # Floor raised from 128 on 2026-08-20. The configured model is a reasoning
+    # model: it spends output tokens on `reasoning_content` before writing an
+    # answer, measured at ~70% of output on a RAG-shaped call (200 of 285
+    # tokens). At 128 the budget is consumed by thinking and the provider
+    # returns 200 OK with empty content, so the floor has to leave room for both
+    # halves. llm._require_answer catches it if this is somehow bypassed.
+    {"key": "max_tokens", "label": "Max answer tokens", "type": "int", "min": 512, "max": 4096,
      "group": "Generation", "requires": "live",
      "help": "Upper bound on answer length."},
     {"key": "llm_model", "label": "LLM model tag", "type": "str",
