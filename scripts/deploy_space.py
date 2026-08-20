@@ -138,6 +138,12 @@ def _write_manifest(stage: Path, allow_dirty: bool) -> dict:
 # so a key cannot reach a commit by being staged with everything else.
 SPACE_SECRETS = [
     "LLM_API_KEY",       # Cloudflare Workers AI inference token
+    # A secret, not a variable, because the Cloudflare account id is embedded in
+    # its path and Space VARIABLES are publicly viewable on the settings page.
+    # scripts/secret_inventory.py already classified CF_ACCOUNT_ID this way
+    # ("identifies the billing account"); putting the URL in the public list
+    # would have published it on every deploy.
+    "LLM_BASE_URL",
     "QDRANT_API_KEY",    # only when QDRANT_MODE=remote
     "ADMIN_USERS",       # username:bcrypt_hash pairs — never plaintext
     "ADMIN_TOKEN",       # legacy single token; ADMIN_USERS supersedes it
@@ -148,7 +154,7 @@ SPACE_SECRETS = [
 
 SPACE_VARIABLES = [
     "ENVIRONMENT", "STARTUP_INIT", "ALLOW_INDEX_BUILD_ON_BOOT",
-    "LLM_BASE_URL", "LLM_MODEL", "LLM_DAILY_NEURON_BUDGET",
+    "LLM_MODEL", "LLM_DAILY_NEURON_BUDGET",
     "MAX_CONCURRENT_GENERATIONS", "TRUSTED_PROXY_COUNT",
     "QDRANT_MODE", "QDRANT_URL", "QDRANT_COLLECTION_ALIAS", "QDRANT_PATH",
     "COLLECTION", "CHAT_LOG_MODE", "CHAT_LOG_RETENTION_DAYS",
