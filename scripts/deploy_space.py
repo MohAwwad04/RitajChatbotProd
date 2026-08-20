@@ -213,6 +213,15 @@ SPACE_VARIABLES = [
 PRODUCTION_REQUIRED = ["LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "CORS_ORIGINS"]
 
 
+def _delete(remove, space_id: str, name: str, token: str, cleared: list[str]) -> None:
+    """Remove a name from the Space; absent is a normal, silent outcome."""
+    try:
+        remove(space_id, name, token=token)
+        cleared.append(name)
+    except Exception:  # noqa: BLE001 — nothing to remove is the common case
+        pass
+
+
 def _push_configuration(space_id: str, token: str, *, production: bool) -> None:
     """Set every provided secret and variable on the Space before uploading."""
     from huggingface_hub import (  # noqa: PLC0415
@@ -256,25 +265,45 @@ def _push_configuration(space_id: str, token: str, *, production: bool) -> None:
         except Exception:  # noqa: BLE001 — absent is the normal case, and fine
             pass
 
-    set_secrets, set_variables = [], []
+    # Three states, not two. `None` means the deploying shell said nothing about
+    # this name, so whatever the Space already holds is left alone. An EMPTY
+    # string is a deliberate instruction to clear it, and that distinction is
+    # load-bearing: switching QDRANT_MODE to remote requires QDRANT_PATH to be
+    # empty, and `if value:` treated "" the same as absent — so the stale
+    # /tmp/qdrant would have survived, and the container refuses to start with
+    # both set (config.qdrant_problems). That is a twenty-minute failure for a
+    # one-character reason.
+    set_secrets, set_variables, cleared = [], [], []
+
     for name in SPACE_SECRETS:
         value = os.environ.get(name)
-        if value:
-            _clear_opposite(name, wanted="secret")
-            add_space_secret(space_id, name, value, token=token)
-            set_secrets.append(name)
+        if value is None:
+            continue
+        if value == "":
+            _delete(delete_space_secret, space_id, name, token, cleared)
+            continue
+        _clear_opposite(name, wanted="secret")
+        add_space_secret(space_id, name, value, token=token)
+        set_secrets.append(name)
+
     for name in SPACE_VARIABLES:
         value = os.environ.get(name)
-        if value:
-            _clear_opposite(name, wanted="variable")
-            add_space_variable(space_id, name, value, token=token)
-            set_variables.append(name)
+        if value is None:
+            continue
+        if value == "":
+            _delete(delete_space_variable, space_id, name, token, cleared)
+            continue
+        _clear_opposite(name, wanted="variable")
+        add_space_variable(space_id, name, value, token=token)
+        set_variables.append(name)
 
     if set_secrets:
         # Names only. The values are the thing being protected.
         print(f"Secrets set on {space_id}: {', '.join(set_secrets)}")
     if set_variables:
         print(f"Variables set on {space_id}: {', '.join(set_variables)}")
+    if cleared:
+        print(f"Cleared on {space_id}: {', '.join(cleared)}")
     if not set_secrets and not set_variables:
         print("No configuration supplied in the environment — leaving the Space's as-is.")
 
