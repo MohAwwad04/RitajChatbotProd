@@ -101,13 +101,18 @@ One record per commit. If approval for one page is later withdrawn, the revert
 is one commit.
 
 ```bash
-python scripts/check_corpus_policy.py --strict    # must exit 0, non-vacuously
+python scripts/check_corpus_policy.py --strict --release   # exits 1 if it checked nothing
 grep -c 'approved: true' data/sources.yaml        # matches what was approved
 ```
 
-Note that `check_corpus_policy.py` currently passes **vacuously** — it reports
-"none published", i.e. it is validating an empty set. The first real approval is
-the first time its exit code means anything.
+`check_corpus_policy.py` used to pass **vacuously** here — it validated an empty
+set and printed an OK that had never rejected a real document. That is fixed: it
+now reports what it actually validated, prints `PASSED VACUOUSLY` when the
+answer is "nothing", and `--release` exits 1 in that case. The release checklist
+runs the `--release` form.
+
+So the first real approval is still the first time the *content* rules are
+exercised — but the gate no longer claims otherwise in the meantime.
 
 ## 5. Publish
 

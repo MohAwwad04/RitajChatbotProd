@@ -19,6 +19,7 @@ Exit 0 = clean. Exit 1 = a human has to look.
 Usage:
     python scripts/check_corpus_policy.py
     python scripts/check_corpus_policy.py --strict   # also fail on warnings
+    python scripts/check_corpus_policy.py --release  # also fail if it checked nothing
 """
 
 from __future__ import annotations
@@ -40,7 +41,8 @@ NON_CORPUS_DIRS = ("quarantine", "snapshots", "corpus")
 INDEXABLE_SUFFIXES = {".md", ".txt", ".pdf"}
 
 
-def check_manifest(strict: bool) -> tuple[int, int]:
+def check_manifest(strict: bool) -> tuple[int, int, int]:
+    """Returns (fatal, counted_warnings, approved_records_validated)."""
     report = source_policy.load_and_validate()
     fatal = [p for p in report.problems if p.fatal]
     warnings = [p for p in report.problems if not p.fatal]
@@ -53,7 +55,7 @@ def check_manifest(strict: bool) -> tuple[int, int]:
 
     if not report.approved:
         print("  note: no approved sources — a production index cannot be built yet")
-    return len(fatal), len(warnings) if strict else 0
+    return len(fatal), len(warnings) if strict else 0, len(report.approved)
 
 
 def check_stray_corpus_files() -> int:
@@ -72,29 +74,33 @@ def check_stray_corpus_files() -> int:
     return errors
 
 
-def check_published_artifact() -> int:
-    """Every chunk in the published artifact traces to an approved Ritaj URL."""
+def check_published_artifact() -> tuple[int, int]:
+    """Returns (errors, chunks_validated).
+
+    The chunk count is the evidence that this check did any work at all —
+    see the vacuity guard in main().
+    """
     version = corpus.current_version()
     if not version:
         print("artifact: none published (CURRENT is unset)")
-        return 0
+        return 0, 0
 
     directory = corpus.artifact_dir(version)
     if directory is None:
         print(f"  ERROR CURRENT points at {version}, which does not exist")
-        return 1
+        return 1, 0
 
     manifest = corpus.manifest(version)
     if manifest is None:
         print(f"  ERROR artifact {version} has no readable manifest.json")
-        return 1
+        return 1, 0
 
     approved_ids = {s["id"] for s in manifest.get("sources", [])}
     errors = 0
     chunks_path = directory / "chunks.jsonl"
     if not chunks_path.is_file():
         print(f"  ERROR artifact {version} has no chunks.jsonl")
-        return 1
+        return 1, 0
 
     seen = 0
     with chunks_path.open(encoding="utf-8") as fh:
@@ -124,28 +130,65 @@ def check_published_artifact() -> int:
                 errors += 1
 
     print(f"artifact: {version} — {seen} chunk(s), {manifest.get('documents')} document(s)")
-    return errors
+    return errors, seen
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--strict", action="store_true", help="treat warnings as failures")
+    ap.add_argument(
+        "--release", action="store_true",
+        help="also fail when the check validated nothing (see the vacuity guard)",
+    )
     args = ap.parse_args()
 
     print("Corpus source-policy check\n")
-    fatal, warned = check_manifest(args.strict)
+    fatal, warned, approved = check_manifest(args.strict)
     print("\nStray corpus files")
     strays = check_stray_corpus_files()
     if not strays:
         print("  none")
     print("\nPublished artifact")
-    artifact = check_published_artifact()
+    artifact, chunks = check_published_artifact()
 
     total = fatal + warned + strays + artifact
     print()
+
+    # --- vacuity guard ------------------------------------------------------
+    #
+    # This gate used to print "OK — every indexable record traces to an approved
+    # ritaj.birzeit.edu source" and exit 0 against an EMPTY set. The statement was
+    # vacuously true and operationally meaningless: it had never rejected a real
+    # document, so a green run carried no information, and the greenness was
+    # actively reassuring. cowork_ritaj/INTAKE.md says as much — "the first real
+    # approval is the first time its exit code means anything."
+    #
+    # A gate that cannot distinguish "everything passed" from "there was nothing
+    # to check" is worse than no gate. So the check now reports what it actually
+    # validated, and refuses to claim more than that.
+    validated_nothing = approved == 0 and chunks == 0
+
     if total:
         sys.exit(f"FAILED: {total} problem(s).")
-    print("OK — every indexable record traces to an approved ritaj.birzeit.edu source.")
+
+    if validated_nothing:
+        if args.release:
+            sys.exit(
+                "FAILED: this check validated NOTHING — 0 approved records and 0 "
+                "published chunks.\n"
+                "        A release cannot be gated on a check with no subject. "
+                "Approve at least one\n"
+                "        source (cowork_ritaj/INTAKE.md) and publish an artifact "
+                "before cutting a release."
+            )
+        print("PASSED VACUOUSLY — 0 approved records, 0 published chunks.")
+        print("  Nothing was checked, so this result is not evidence of anything.")
+        print("  It will exit 1 under --release, which is what the release "
+              "checklist runs.")
+        return
+
+    print(f"OK — {approved} approved record(s) and {chunks} published chunk(s) "
+          "all trace to an approved ritaj.birzeit.edu source.")
 
 
 if __name__ == "__main__":

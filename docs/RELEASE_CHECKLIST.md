@@ -12,8 +12,11 @@ Run from a clean checkout of the release tag.
 
 ```bash
 pytest -q                                   # backend unit + integration
-node --test chrome-extension/navigation.test.mjs
-python scripts/check_corpus_policy.py       # every chunk traces to an approved Ritaj URL
+node --test chrome-extension/navigation.test.mjs \
+            chrome-extension/links.test.mjs \
+            chrome-extension/transport.test.mjs
+python scripts/check_corpus_policy.py --release   # traces to an approved Ritaj URL,
+                                                 # AND refuses to pass on an empty set
 python scripts/check_navigation.py          # destinations reviewed; 18 URL attacks rejected
 python scripts/check_extension.py           # minimal permissions; allowlist + limit parity
 python scripts/check_privacy.py             # disclosures match the code; portal claims match the guardrail
@@ -87,6 +90,11 @@ not the click itself:
 
 ## C. Data and answers
 
+- [ ] `check_corpus_policy.py --release` exits 0. The `--release` form is what
+      makes this line mean anything: the plain form passes vacuously against an
+      empty corpus, printing an OK that has never rejected a real document. A
+      gate that cannot tell "everything passed" from "there was nothing to
+      check" is worse than no gate, because it reassures.
 - [ ] `check_corpus_policy.py` reports a published artifact with a non-zero
       chunk count. Today it reports "none published".
 - [ ] No `www.birzeit.edu`, other domain, private student content or `SAMPLE`
