@@ -7,9 +7,18 @@ Usage:
     HF_TOKEN=hf_xxx .venv/bin/python scripts/deploy_space.py --allow-dirty --space staging
 
 Stages exactly what the Dockerfile needs (plus the Space README front-matter),
-uploads it to the Space repo (which triggers a rebuild), and — if ADMIN_TOKEN
-is given — sets/updates that Space secret first. Requires an HF token with
-Write access to the Space (https://huggingface.co/settings/tokens).
+uploads it to the Space repo (which triggers a rebuild), and first pushes every
+secret and variable present in this shell's environment (SPACE_SECRETS /
+SPACE_VARIABLES below). Requires an HF token with Write access to the Space
+(https://huggingface.co/settings/tokens).
+
+A production deploy is refused up front when a fail-closed setting is missing.
+The container validates the same things at boot, but by then it has spent ~20
+minutes building and dies in its health check — which is precisely the state the
+existing Space has been sitting in ("Launch timed out, workload was not healthy
+after 30 min"). Checking here turns a 20-minute failure into an instant one.
+
+See SETUP_LIVE.md for the accounts and values this needs.
 
 Release control (roadmap Phase 0, task 4): this script used to upload whatever
 happened to be in the working directory. A production deploy now REFUSES a dirty
@@ -118,6 +127,82 @@ def _write_manifest(stage: Path, allow_dirty: bool) -> dict:
     return manifest
 
 
+# Runtime configuration pushed to the Space, split by sensitivity.
+#
+# SECRETS are write-only once set: HF does not show them again in the settings
+# page, and they are not copied into a duplicated Space. VARIABLES are public
+# and visible, which is correct for everything that is a deployment choice
+# rather than a credential.
+#
+# Both are read from this machine's environment, never from a file in the repo,
+# so a key cannot reach a commit by being staged with everything else.
+SPACE_SECRETS = [
+    "LLM_API_KEY",       # Cloudflare Workers AI inference token
+    "QDRANT_API_KEY",    # only when QDRANT_MODE=remote
+    "ADMIN_USERS",       # username:bcrypt_hash pairs — never plaintext
+    "ADMIN_TOKEN",       # legacy single token; ADMIN_USERS supersedes it
+    "SESSION_SECRET",    # signs admin session tokens
+    "UPSTASH_REDIS_REST_URL",
+    "UPSTASH_REDIS_REST_TOKEN",
+]
+
+SPACE_VARIABLES = [
+    "ENVIRONMENT", "STARTUP_INIT", "ALLOW_INDEX_BUILD_ON_BOOT",
+    "LLM_BASE_URL", "LLM_MODEL", "LLM_DAILY_NEURON_BUDGET",
+    "MAX_CONCURRENT_GENERATIONS", "TRUSTED_PROXY_COUNT",
+    "QDRANT_MODE", "QDRANT_URL", "QDRANT_COLLECTION_ALIAS", "QDRANT_PATH",
+    "COLLECTION", "CHAT_LOG_MODE", "CHAT_LOG_RETENTION_DAYS",
+    "CORS_ORIGINS", "EXTENSION_ID",
+    "MAX_MESSAGE_CHARS", "MAX_BODY_BYTES", "HISTORY_MAX_TURNS", "HISTORY_MAX_CHARS",
+]
+
+# What production genuinely cannot start without. Checked HERE, before the
+# upload, because the alternative is discovering it from a Space that builds for
+# twenty minutes and then dies in config.check_production_config() — which is
+# exactly the "Launch timed out" the existing Space has been sitting in.
+PRODUCTION_REQUIRED = ["LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "CORS_ORIGINS"]
+
+
+def _push_configuration(space_id: str, token: str, *, production: bool) -> None:
+    """Set every provided secret and variable on the Space before uploading."""
+    from huggingface_hub import add_space_secret, add_space_variable  # noqa: PLC0415
+
+    if production:
+        missing = [k for k in PRODUCTION_REQUIRED if not os.environ.get(k)]
+        # ADMIN_USERS or ADMIN_TOKEN — either satisfies the auth requirement.
+        if not (os.environ.get("ADMIN_USERS") or os.environ.get("ADMIN_TOKEN")):
+            missing.append("ADMIN_USERS (or ADMIN_TOKEN)")
+        if missing:
+            sys.exit(
+                "Refusing to deploy to production without:\n  "
+                + "\n  ".join(missing)
+                + "\n\nThe container is fail-closed on these "
+                  "(config.check_production_config), so it would build for ~20 "
+                  "minutes and then fail its health check. Set them in this "
+                  "shell and re-run. See SETUP_LIVE.md."
+            )
+
+    set_secrets, set_variables = [], []
+    for name in SPACE_SECRETS:
+        value = os.environ.get(name)
+        if value:
+            add_space_secret(space_id, name, value, token=token)
+            set_secrets.append(name)
+    for name in SPACE_VARIABLES:
+        value = os.environ.get(name)
+        if value:
+            add_space_variable(space_id, name, value, token=token)
+            set_variables.append(name)
+
+    if set_secrets:
+        # Names only. The values are the thing being protected.
+        print(f"Secrets set on {space_id}: {', '.join(set_secrets)}")
+    if set_variables:
+        print(f"Variables set on {space_id}: {', '.join(set_variables)}")
+    if not set_secrets and not set_variables:
+        print("No configuration supplied in the environment — leaving the Space's as-is.")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("message", nargs="?", default=None,
@@ -135,12 +220,9 @@ def main() -> None:
     if not token:
         sys.exit("Set HF_TOKEN (a Write token from huggingface.co/settings/tokens).")
 
-    from huggingface_hub import add_space_secret, upload_folder
+    from huggingface_hub import add_space_secret, add_space_variable, upload_folder
 
-    admin_token = os.environ.get("ADMIN_TOKEN")
-    if admin_token:
-        add_space_secret(space_id, "ADMIN_TOKEN", admin_token, token=token)
-        print(f"ADMIN_TOKEN secret set on {space_id}.")
+    _push_configuration(space_id, token, production=args.space == "production")
 
     with tempfile.TemporaryDirectory() as tmp:
         stage = Path(tmp) / "stage"
