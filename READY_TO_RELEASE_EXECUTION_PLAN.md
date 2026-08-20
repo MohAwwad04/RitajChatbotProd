@@ -1,5 +1,9 @@
 # Ritaj Assistant: ready-to-release execution plan
 
+> **HISTORICAL — superseded 20 August 2026.** Its measurements are from
+> 15 August and no longer describe this tree. Current state and remaining
+> work: **[FUTURE_PLAN.md](FUTURE_PLAN.md)**.
+
 **Prepared:** 5 August 2026  
 **Applies to:** `roadmap/2026-release` at `859773e` and later  
 **Target release:** Chrome side-panel assistant backed by a Ritaj-only RAG service and Gemma 4  

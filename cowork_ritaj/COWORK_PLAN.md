@@ -1,5 +1,9 @@
 # Ritaj Assistant — Cowork execution plan to production
 
+> **DONE — its tasks are recorded in [PROGRESS.md](PROGRESS.md).** The current
+> forward plan is **[../FUTURE_PLAN.md](../FUTURE_PLAN.md)**. `INTAKE.md` in
+> this folder remains authoritative — the corpus path is unchanged.
+
 **Written:** 2026-08-10 · **Baseline commit:** `3b2a6e3` on `roadmap/2026-release` (draft PR #2 → `release`)
 **Audience:** Claude Cowork agents working in `~/Desktop/ritaj-rag-chatbot`, plus the human owner for the steps no agent can do.
 

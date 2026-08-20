@@ -1,5 +1,9 @@
 # Going live, at $0
 
+> **DONE — 20 August 2026.** All four human steps were completed and the
+> deployment is live. Kept as the record of how it was configured, not as
+> outstanding work. The current forward plan is **[FUTURE_PLAN.md](FUTURE_PLAN.md)**.
+
 Everything in this file is free and needs no credit card. It is written to be
 followed top to bottom in one sitting; the parts only you can do are marked
 **YOU**, and there are four of them.

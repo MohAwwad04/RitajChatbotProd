@@ -1,5 +1,12 @@
 # Ritaj Assistant: zero-cost production and Chrome extension plan
 
+> **MOSTLY EXECUTED — 20 August 2026.** The P0 list in §4 is closed except
+> the corpus, and the system described here is live. §6 (free-tier hosting
+> research) remains useful reference. **§10's advice to reduce `max_tokens`
+> to 350–500 is WITHDRAWN** — the model reasons before answering and that
+> budget returns empty answers; see FUTURE_PLAN.md §5.
+> Current forward plan: **[FUTURE_PLAN.md](FUTURE_PLAN.md)**.
+
 **Prepared:** 15 August 2026  
 **Repository:** `ritaj-rag-chatbot`  
 **Purpose:** turn the existing project into a truthful, secure, live student pilot with a Chrome side-panel extension, a separately hosted LLM, and a free vector database.  
