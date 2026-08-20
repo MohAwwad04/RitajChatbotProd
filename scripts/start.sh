@@ -22,7 +22,20 @@ PORT="${PORT:-7860}"
 # start.sh) keeps the repo-root files.
 export CHAT_LOG_PATH="${CHAT_LOG_PATH:-/tmp/chat_log.jsonl}"
 export CALIBRATION_PATH="${CALIBRATION_PATH:-/tmp/calibration.json}"
-export QDRANT_PATH="${QDRANT_PATH:-/tmp/qdrant}"
+# QDRANT_PATH only means anything in embedded mode. In remote mode it must be
+# EMPTY, because config.qdrant_problems refuses a configuration carrying both —
+# an ambiguous store is how a deployment ends up silently reading an empty local
+# directory while everyone believes it is on the cluster.
+#
+# Unsetting has to happen here rather than on the host: the Dockerfile bakes
+# QDRANT_PATH=/tmp/qdrant into the image as the embedded default, and an image
+# ENV cannot be removed by clearing a platform variable — it is already in the
+# process environment before anything on the host is applied.
+if [ "${QDRANT_MODE:-auto}" = "remote" ]; then
+  unset QDRANT_PATH
+else
+  export QDRANT_PATH="${QDRANT_PATH:-/tmp/qdrant}"
+fi
 
 # Only wait when pointing at a separate Qdrant server. Bounded, and never fatal:
 # readiness reports the failure, rather than the entrypoint dying before the

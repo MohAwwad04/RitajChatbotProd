@@ -189,6 +189,12 @@ SPACE_SECRETS = [
     # would have published it on every deploy.
     "LLM_BASE_URL",
     "QDRANT_API_KEY",    # only when QDRANT_MODE=remote
+    # A secret for the same reason LLM_BASE_URL is: the hostname embeds the
+    # cluster id, and Space VARIABLES are publicly viewable on the settings
+    # page. The key is what authorises access, but publishing the endpoint of a
+    # 0.5 vCPU free-tier node invites attempts against it, and there is no
+    # reason to hand that out.
+    "QDRANT_URL",
     "ADMIN_USERS",       # username:bcrypt_hash pairs — never plaintext
     "ADMIN_TOKEN",       # legacy single token; ADMIN_USERS supersedes it
     "SESSION_SECRET",    # signs admin session tokens
@@ -200,7 +206,7 @@ SPACE_VARIABLES = [
     "ENVIRONMENT", "STARTUP_INIT", "ALLOW_INDEX_BUILD_ON_BOOT",
     "LLM_MODEL", "LLM_DAILY_NEURON_BUDGET",
     "MAX_CONCURRENT_GENERATIONS", "TRUSTED_PROXY_COUNT",
-    "QDRANT_MODE", "QDRANT_URL", "QDRANT_COLLECTION_ALIAS", "QDRANT_PATH",
+    "QDRANT_MODE", "QDRANT_COLLECTION_ALIAS", "QDRANT_PATH",
     "COLLECTION", "CHAT_LOG_MODE", "CHAT_LOG_RETENTION_DAYS",
     "CORS_ORIGINS", "EXTENSION_ID",
     "MAX_MESSAGE_CHARS", "MAX_BODY_BYTES", "HISTORY_MAX_TURNS", "HISTORY_MAX_CHARS",

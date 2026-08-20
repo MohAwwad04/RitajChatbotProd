@@ -19,6 +19,9 @@ ENV PYTHONUNBUFFERED=1 \
     # Embedded Qdrant storage. Declared here rather than only as a dashboard
     # variable, so the container's behaviour is visible in the repo and a fresh
     # deploy can't miss it. /tmp because the app dir is read-only on HF Spaces.
+    # Embedded-mode default. scripts/start.sh UNSETS this when
+    # QDRANT_MODE=remote — an image ENV cannot be cleared from the host,
+    # so the entrypoint is the only place that can remove it.
     QDRANT_PATH=/tmp/qdrant \
     ENVIRONMENT=production \
     # Production serves the prebuilt corpus artifact; embedding at boot is the
