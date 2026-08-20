@@ -66,9 +66,6 @@ const STRINGS = {
       'When does the semester start?',
       'Where do I find my schedule on Ritaj?',
     ],
-    // Offered only when the finder actually has a destination — a chip that
-    // resolves to nothing teaches a student the assistant is broken.
-    navSuggestions: ['Open course registration'],
   },
   ar: {
     dir: 'rtl',
@@ -118,7 +115,6 @@ const STRINGS = {
       'متى يبدأ الفصل الدراسي؟',
       'أين أجد جدولي في ريتاج؟',
     ],
-    navSuggestions: ['افتح تسجيل المساقات'],
   },
 }
 
@@ -383,10 +379,6 @@ function renderFinder() {
   }
 
   $('finder-note').textContent = s.finderNote
-  // Destinations arriving from the network can unlock the navigation
-  // suggestion chips, which are rendered from the same knownActions list. Only
-  // while the welcome screen is showing — never mid-conversation.
-  if (!turns.length) renderSuggestions()
   for (const action of knownActions) {
     const label = lang === 'ar' ? action.label_ar : action.label_en
     if (!label) continue
@@ -541,14 +533,12 @@ function renderThread() {
 function renderSuggestions() {
   const box = $('suggestions')
   box.innerHTML = ''
-  const s = S()
-  // A navigation prompt is only a real suggestion if a reviewed destination
-  // exists to answer it. With none approved, "Open course registration"
-  // resolves to nothing and reads as a broken product rather than an honest one.
-  const prompts = knownActions.length
-    ? [...s.suggestions, ...(s.navSuggestions ?? [])]
-    : s.suggestions
-  for (const text of prompts) {
+  // Deliberately no navigation prompts here. A chip like "Open course
+  // registration" routes through chat to reach a destination the finder above
+  // already offers as a button — so it needs the model to be up in order to do
+  // something that works with the model down, and it names a destination that
+  // may not be approved. The finder IS the navigation affordance.
+  for (const text of S().suggestions) {
     const b = document.createElement('button')
     b.type = 'button'
     b.textContent = text
