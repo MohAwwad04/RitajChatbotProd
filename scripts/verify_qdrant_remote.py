@@ -9,7 +9,7 @@ over the wire, under TLS, with an API key, on a 0.5 vCPU / 1 GB free-tier node.
 
 This script closes that gap by running the whole path against the configured
 cluster and reporting what happened, including timings. It is the acceptance
-check named in PRODUCTION_FREE_LIVE_PLAN.md section 9.
+check named in HANDBOOK.md §4.
 
 It is deliberately safe to run against a live cluster:
 

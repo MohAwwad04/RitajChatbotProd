@@ -32,7 +32,7 @@ class Settings:
     environment: str = os.getenv("ENVIRONMENT", "development").strip().lower()
 
     # LLM (any OpenAI-compatible endpoint: Ollama for dev, Cloudflare Workers AI
-    # for the pilot — see docs/adr/ADR-001-llm-provider.md)
+    # for the pilot — see HANDBOOK.md §9 (ADR-001))
     llm_base_url: str = os.getenv("LLM_BASE_URL", "http://localhost:11434/v1")
     llm_api_key: str = os.getenv("LLM_API_KEY", "ollama")
     llm_model: str = os.getenv("LLM_MODEL", "gemma4:e4b")

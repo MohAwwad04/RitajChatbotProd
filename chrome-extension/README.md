@@ -26,7 +26,7 @@ It is an **independent student project**, not an official Birzeit service.
 No content scripts, no `tabs`/`activeTab`/`scripting` permission, no host access
 to `ritaj.birzeit.edu`. It cannot read the page you are on, its DOM, cookies,
 form values or login session, and it cannot register, drop, pay or submit
-anything. See [ADR-002](../docs/adr/ADR-002-navigation-only-automation.md).
+anything. See [ADR-002](../HANDBOOK.md §9 (ADR-002)).
 
 ## Files
 

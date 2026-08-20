@@ -151,7 +151,7 @@ def main() -> None:
     if problems:
         sys.exit(
             f"FAILED: {problems} unassigned duty/unrehearsed drill. These need a "
-            "person, not a code change — see cowork_ritaj/COWORK_PLAN.md §7."
+            "person, not a code change — see HANDBOOK.md §7."
         )
     print("OK — every duty is owned and every drill has been rehearsed.")
 

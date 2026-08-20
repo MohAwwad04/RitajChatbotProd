@@ -9,7 +9,7 @@ The LLM is stubbed with a configurable delay. That is deliberate — this measur
 the **application's** behaviour (concurrency cap, queue timeout, rate limits,
 budget, error handling) without spending provider quota or letting network
 variance drown the signal. Real provider latency is added on top and is measured
-separately against staging (docs/DEPLOY_GEMMA4.md §1.3).
+separately against staging (HANDBOOK.md §4).
 
 Usage:
     python scripts/loadtest.py                    # full suite

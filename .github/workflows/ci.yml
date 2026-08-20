@@ -71,7 +71,7 @@ jobs:
         # NOT --release here. The release form fails when the check has
         # nothing to validate, which is the correct state of this branch
         # today; blocking every pull request on it would teach the team to
-        # ignore a red job. docs/RELEASE_CHECKLIST.md runs --release, and
+        # ignore a red job. HANDBOOK.md §6 runs --release, and
         # that is where it blocks.
         run: python scripts/check_corpus_policy.py
 
@@ -96,7 +96,7 @@ jobs:
       # Advisory for the same reason the completeness gate is: it fails on
       # missing *people*, not missing code, and blocking every pull request on
       # an unassigned duty teaches the team to ignore a red job. It is listed as
-      # blocking in docs/RELEASE_CHECKLIST.md §E — nothing ships with an
+      # blocking in HANDBOOK.md §6 E — nothing ships with an
       # unowned duty or an unrehearsed rollback.
       - name: Operational ownership register (advisory)
         continue-on-error: true

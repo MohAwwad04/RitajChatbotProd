@@ -160,7 +160,7 @@ def main() -> None:
     # ritaj.birzeit.edu source" and exit 0 against an EMPTY set. The statement was
     # vacuously true and operationally meaningless: it had never rejected a real
     # document, so a green run carried no information, and the greenness was
-    # actively reassuring. cowork_ritaj/INTAKE.md says as much — "the first real
+    # actively reassuring. HANDBOOK.md §5 says as much — "the first real
     # approval is the first time its exit code means anything."
     #
     # A gate that cannot distinguish "everything passed" from "there was nothing
@@ -178,7 +178,7 @@ def main() -> None:
                 "published chunks.\n"
                 "        A release cannot be gated on a check with no subject. "
                 "Approve at least one\n"
-                "        source (cowork_ritaj/INTAKE.md) and publish an artifact "
+                "        source (HANDBOOK.md §5) and publish an artifact "
                 "before cutting a release."
             )
         print("PASSED VACUOUSLY — 0 approved records, 0 published chunks.")

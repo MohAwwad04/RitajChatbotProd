@@ -19,7 +19,7 @@ This table is **machine-checked**: `python scripts/check_operations.py` parses
 lacks a date and a recovery time. It rejects placeholders too — "TBD", "the
 team" and "maintainers" are not owners, because when everybody is responsible
 nobody is paged. It runs advisory in CI and blocking at release
-(`docs/RELEASE_CHECKLIST.md` §E).
+(`HANDBOOK.md §6` §E).
 
 | Duty | Primary | Backup | Access needed |
 |---|---|---|---|

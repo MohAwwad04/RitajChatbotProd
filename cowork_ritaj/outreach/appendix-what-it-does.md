@@ -25,7 +25,7 @@ it does not know and points to the right office.
 | Says "I don't know" rather than guessing when no approved page supports the answer | `src/ritaj/generate.py` (abstention), red-team suite |
 | Works in Arabic and English, including Arabic spelling and diacritic variation | `src/ritaj/arabic.py` |
 | Flags an answer whose source is past its re-check window as possibly out of date | `source_policy.meta_is_stale` |
-| Can offer a button that opens a **pre-approved** Ritaj page — never automatically, always after a click | `data/navigation.yaml`, `docs/adr/ADR-002` |
+| Can offer a button that opens a **pre-approved** Ritaj page — never automatically, always after a click | `data/navigation.yaml`, `HANDBOOK.md §9 (ADR-002)` |
 
 ## What it refuses
 

@@ -10,7 +10,7 @@ is not a missing feature.
 Ritaj sits behind a Cloudflare managed challenge that answers **403 to every
 automated request** — verified 2026-08-20 across `/`, `/academic-calendar` and
 even `/robots.txt`, with and without a browser User-Agent. Defeating that
-challenge is explicitly out of scope (`cowork_ritaj/INTAKE.md` §0), and it would
+challenge is explicitly out of scope (`HANDBOOK.md` §5), and it would
 also make this project's central promise false: that every indexed byte came
 through an authorized path a named person approved.
 
@@ -96,7 +96,7 @@ def report(as_json: Path | None) -> int:
     print(f"Corpus freshness — {today.isoformat()}\n")
     if not approved:
         print("  No approved sources. Nothing can be stale, and nothing can be served.")
-        print("  This is not a clean bill of health — see cowork_ritaj/INTAKE.md.")
+        print("  This is not a clean bill of health — see HANDBOOK.md §5.")
     else:
         width = max(len(r["id"]) for r in rows)
         for row in rows:

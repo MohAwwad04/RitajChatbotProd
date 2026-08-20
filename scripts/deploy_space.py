@@ -18,7 +18,7 @@ minutes building and dies in its health check — which is precisely the state t
 existing Space has been sitting in ("Launch timed out, workload was not healthy
 after 30 min"). Checking here turns a 20-minute failure into an instant one.
 
-See SETUP_LIVE.md for the accounts and values this needs.
+See HANDBOOK.md §4 for the accounts and values this needs.
 
 Release control (roadmap Phase 0, task 4): this script used to upload whatever
 happened to be in the working directory. A production deploy now REFUSES a dirty
@@ -249,7 +249,7 @@ def _push_configuration(space_id: str, token: str, *, production: bool) -> None:
                 + "\n\nThe container is fail-closed on these "
                   "(config.check_production_config), so it would build for ~20 "
                   "minutes and then fail its health check. Set them in this "
-                  "shell and re-run. See SETUP_LIVE.md."
+                  "shell and re-run. See HANDBOOK.md §4."
             )
 
     # Hugging Face refuses to start a Space where one name exists as BOTH a

@@ -15,7 +15,7 @@
 // Chrome's side panel cannot be opened programmatically by an extension, and
 // Playwright has no API for driving it (microsoft/playwright#26693). So the
 // literal "clicking the toolbar icon opens the panel" step stays a manual
-// check, recorded as such in docs/RELEASE_CHECKLIST.md. What IS automated here
+// check, recorded as such in HANDBOOK.md §6. What IS automated here
 // is everything behind it: that the service worker registers and sets the panel
 // behaviour, that the panel page itself loads and works at real widths, that the
 // destination validator rejects hostile payloads in the browser (not just in
@@ -453,7 +453,7 @@ async function main() {
   console.log(
     '\nNOT automated (Playwright cannot drive the Chrome side panel — see\n' +
     'microsoft/playwright#26693): clicking the toolbar icon opens the panel.\n' +
-    'Verify by hand before release; docs/RELEASE_CHECKLIST.md §D records it.',
+    'Verify by hand before release; HANDBOOK.md §6 D records it.',
   )
   if (failed.length) process.exit(1)
 }
