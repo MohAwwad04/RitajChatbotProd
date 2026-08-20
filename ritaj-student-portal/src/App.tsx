@@ -99,6 +99,15 @@ function App() {
           onClose={() => setMobileMenuOpen(false)}
         />
         <div className="workspace">
+          {/* Persistent, above everything, and it removes itself the moment a
+              verified corpus is published — because it is driven by the corpus
+              manifest, not by a hard-coded flag someone has to remember. */}
+          {capabilities?.corpus?.verified === false && (
+            <div className="corpus-warning" role="status">
+              <strong>{s.corpus_unverified_title}</strong>
+              {s.corpus_unverified}
+            </div>
+          )}
           <Header
             title={title}
             darkMode={darkMode}

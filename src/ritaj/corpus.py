@@ -68,4 +68,15 @@ def summary() -> dict:
         "documents": man.get("documents"),
         "chunks": man.get("chunks"),
         "sources_sha256": man.get("sources_sha256"),
+        # Whether every indexed source passed the Ritaj-only source policy.
+        # False means the operator deliberately published material that did not
+        # — off-domain, unverified acquisition, or carrying SAMPLE placeholder
+        # text. That is a decision an operator is allowed to make, and it is not
+        # a decision a student should have to discover from a wrong answer, so
+        # it travels with the corpus and both clients surface it.
+        #
+        # Absent in an older manifest, which predates any unverified publish, so
+        # the safe reading of a missing value is True.
+        "verified": bool(man.get("verified", True)),
+        "provenance_note": man.get("provenance_note") or "",
     }

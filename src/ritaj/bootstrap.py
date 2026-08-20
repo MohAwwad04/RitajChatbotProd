@@ -30,10 +30,21 @@ log = logging.getLogger("ritaj.bootstrap")
 
 
 def _store_populated() -> bool:
-    """True when the configured store already holds chunks."""
+    """True when the collection READS ACTUALLY GO TO already holds chunks.
+
+    Was `collection_exists(settings.collection)` — the plain name. In remote
+    mode reads go through `QDRANT_COLLECTION_ALIAS`, and the whole point of the
+    alias is that the underlying collection is named `ritaj_<version>` and
+    changes on every publish. So a correctly published corpus looked EMPTY here,
+    boot raised `CORPUS_UNAVAILABLE`, and the service refused to serve an index
+    it was successfully connected to. Confirmed against the live cluster:
+    `collection_exists` does resolve an alias, so the fix is simply to ask about
+    the name that is actually read.
+    """
     try:
+        target = vectorstore.read_collection()
         return (
-            vectorstore.client().collection_exists(settings.collection)
+            vectorstore.client().collection_exists(target)
             and vectorstore.count() > 0
         )
     except Exception as exc:  # noqa: BLE001 — store may not exist yet; that's a no

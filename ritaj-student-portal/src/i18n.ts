@@ -24,6 +24,9 @@ export const dict = {
     verified: 'موثّق بالمصادر',
     thinking: 'أبحث في الصفحات المعتمدة',
     new_chat: 'محادثة جديدة',
+    corpus_unverified_title: 'الإجابات مبنية على مصادر غير موثّقة',
+    corpus_unverified:
+      'يعتمد المساعد حالياً على مواد لم تُؤخذ من ritaj.birzeit.edu ولم تتحقق منها الجامعة، وبعضها يحتوي على نصوص مؤقتة. اعتبر كل إجابة نقطة بداية وتأكّد منها على صفحة ريتاج المرتبطة.',
     error_connect: 'تعذّر الاتصال بالمساعد الآن. يرجى المحاولة مرة أخرى.',
     // Per-code wording. The backend refuses with a stable code and the right
     // advice differs per cause — telling a student to "try again" when no
@@ -184,6 +187,9 @@ export const dict = {
     verified: 'Answers carry sources',
     thinking: 'Searching the approved pages',
     new_chat: 'New chat',
+    corpus_unverified_title: 'Answers come from unverified sources',
+    corpus_unverified:
+      'This assistant is currently answering from material that was NOT taken from ritaj.birzeit.edu and has not been checked by the university. Some of it contains placeholder text. Treat every answer as a starting point and confirm it on the linked Ritaj page.',
     error_connect: "Couldn't reach the assistant right now. Please try again.",
     error_codes: {
       NO_CORPUS: 'Factual answers are switched off: no approved Ritaj sources have been published yet. The page finder still works.',

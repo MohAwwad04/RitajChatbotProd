@@ -30,6 +30,13 @@ export type NavigationDestination = {
 
 export type Capabilities = {
   corpus: {
+    // False when the operator deliberately published material that did not pass
+    // the Ritaj-only source policy. Comes from the corpus manifest, so it can
+    // neither be forgotten on publish nor left behind when a verified corpus
+    // replaces it. Optional: an older backend predates the field, and the safe
+    // reading of absent is "verified".
+    verified?: boolean
+    provenance_note?: string
     version: string | null
     built_at: string | null
     documents: number | null

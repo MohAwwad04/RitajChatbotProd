@@ -32,7 +32,7 @@ import os
 import shutil
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -68,7 +68,8 @@ def rehash() -> int:
     return 0
 
 
-def publish(version: str, sources: list[source_policy.Source], chunks: int) -> Path:
+def publish(version: str, sources: list[source_policy.Source], chunks: int,
+            *, unverified: bool = False, provenance_note: str = "") -> Path:
     """Freeze the built store + its manifest into data/corpus/<version>/."""
     from ritaj import vectorstore
     from ritaj.config import settings
@@ -94,6 +95,11 @@ def publish(version: str, sources: list[source_policy.Source], chunks: int) -> P
         "documents": len(sources),
         "chunks": chunks,
         "embed_model": settings.embed_model,
+        # Set by --unverified. The manifest is the only durable record of what
+        # went in, so a corpus that skipped the source policy has to say so here
+        # or nothing downstream can.
+        "verified": not unverified,
+        "provenance_note": provenance_note,
         "sources_sha256": hashlib.sha256(
             "".join(sorted((s.sha256 or "") for s in sources)).encode()
         ).hexdigest(),
@@ -143,6 +149,14 @@ def main() -> None:
                     help="build the quarantined development corpus (never production)")
     ap.add_argument("--rehash", action="store_true",
                     help="print each source's actual content hash and exit")
+    ap.add_argument(
+        "--unverified", metavar="REASON",
+        help=(
+            "publish the DEVELOPMENT corpus as a real artifact, bypassing the "
+            "Ritaj-only source policy. REASON is recorded in the manifest and "
+            "surfaced to students. Requires --dev --publish."
+        ),
+    )
     args = ap.parse_args()
 
     if args.rehash:
@@ -153,9 +167,37 @@ def main() -> None:
     if args.dev:
         print("Building the DEVELOPMENT index from data/quarantine/ ...")
         count = ingest.build_from_directory()
-        print(f"Done. {count} chunks indexed (unapproved dev corpus — not publishable).")
+        print(f"Done. {count} chunks indexed.")
+
+        if args.publish and not args.unverified:
+            # The default stays a refusal. Publishing this material is a
+            # decision with a victim if it goes wrong — a student acting on a
+            # fabricated date — so it cannot be reached by adding one more
+            # familiar flag to a command someone half-remembers.
+            sys.exit(
+                "Refusing to publish an artifact from the development corpus.\n\n"
+                "Every document in data/quarantine/ failed the Ritaj-only source "
+                "policy: off-domain\ncanonical URLs, acquisition from search-engine "
+                "listings, and SAMPLE sections that\nare explicitly fabricated "
+                "placeholder text. Publishing it means the assistant will cite\n"
+                "that material to students as though it were verified.\n\n"
+                "If that is genuinely the decision, say so explicitly and it will "
+                "be recorded:\n"
+                "  --unverified \"<who decided, and why>\"\n"
+            )
+
         if args.publish:
-            sys.exit("Refusing to publish an artifact from the development corpus.")
+            print()
+            print("PUBLISHING UNVERIFIED CONTENT — recorded in the manifest and "
+                  "shown to students.")
+            print(f"  reason: {args.unverified}")
+            version = f"unverified-{date.today().isoformat()}"
+            target = publish(version, [], count,
+                             unverified=True, provenance_note=args.unverified)
+            print(f"  artifact: {target}")
+            print()
+            print("  Students will see a banner saying the sources are unverified.")
+            print("  Replace this the moment one real Ritaj page is approved.")
         return
 
     report = source_policy.load_and_validate()
@@ -172,6 +214,9 @@ def main() -> None:
     print(f"\nBuilding index from {len(report.approved)} approved source(s) ...")
     count = ingest.build_from_sources(report.approved)
     print(f"Done. {count} chunks indexed.")
+
+    if args.unverified:
+        sys.exit("--unverified applies to --dev only; approved sources are already verified.")
 
     if args.publish:
         version = compute_version(report.approved)

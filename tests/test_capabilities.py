@@ -131,11 +131,27 @@ def test_limits_match_the_guardrail_that_enforces_them():
 
 
 def test_capabilities_answers_before_the_corpus_is_ready(reset_readiness):
-    """It is a public probe, like /ready — never gated on initialization."""
+    """It is a public probe, like /ready — never gated on initialization.
+
+    The chunk assertion used to read `in (None, 0)`, which encoded "no corpus
+    has been published" — a fact about the working tree on the day it was
+    written, not a property of the endpoint. It broke the moment a corpus was
+    published, which is correct progress, and a test that fails on correct
+    progress only teaches people to edit the assertion. What matters here is
+    that the endpoint ANSWERS while readiness is still false, and that whatever
+    it reports about the corpus is coherent.
+    """
     reset_readiness.reset_for_tests()
     body = _capabilities()
-    assert body["ready"] is False
-    assert body["corpus"]["chunks"] in (None, 0)
+    assert body["ready"] is False           # initialization has not run
+    corpus = body["corpus"]
+    assert "chunks" in corpus and "version" in corpus
+    # Coherent either way: no corpus, or a real one with a version and a count.
+    if corpus["chunks"]:
+        assert corpus["version"], "chunks reported without a corpus version"
+        assert corpus["chunks"] > 0
+    # Provenance always travels, so a client can never fail to ask.
+    assert isinstance(corpus.get("verified"), bool)
 
 
 # --- admin display surfaces on a fresh deployment ---------------------------

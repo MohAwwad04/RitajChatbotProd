@@ -33,6 +33,9 @@ const STRINGS = {
     tooLong: 'That message is too long. Please shorten it to {max} characters or fewer.',
     sources: 'Sources',
     stale: 'may be out of date',
+    corpusUnverifiedTitle: 'Answers come from unverified sources',
+    corpusUnverified:
+      'This assistant is currently answering from material that was NOT taken from ritaj.birzeit.edu and has not been checked by the university. Some of it contains placeholder text. Treat every answer as a starting point and confirm it on the linked Ritaj page.',
     finderTitle: 'Find a Ritaj page',
     finderNote: 'Opens in a new tab',
     finderEmpty:
@@ -97,6 +100,9 @@ const STRINGS = {
     tooLong: 'الرسالة طويلة جداً. يرجى اختصارها إلى {max} حرف أو أقل.',
     sources: 'المصادر',
     stale: 'قد تكون غير محدّثة',
+    corpusUnverifiedTitle: 'الإجابات مبنية على مصادر غير موثّقة',
+    corpusUnverified:
+      'يعتمد المساعد حالياً على مواد لم تُؤخذ من ritaj.birzeit.edu ولم تتحقق منها الجامعة، وبعضها يحتوي على نصوص مؤقتة. اعتبر كل إجابة نقطة بداية وتأكّد منها على صفحة ريتاج المرتبطة.',
     finderTitle: 'ابحث عن صفحة في ريتاج',
     finderNote: 'تُفتح في تبويب جديد',
     finderEmpty:
@@ -170,6 +176,8 @@ const $ = (id) => document.getElementById(id)
 // one arrives — see refreshCapabilities().
 let knownActions = usableActions(null)
 let registryVersion = REGISTRY_VERSION
+// Kept so a language switch can redraw the warning without refetching.
+let lastCorpus = null
 
 const thread = () => $('thread')
 const S = () => STRINGS[lang]
@@ -250,6 +258,7 @@ function applyLang() {
   $('disclaimer-text').textContent = s.disclaimer
   $('lang-toggle').textContent = lang === 'ar' ? 'EN' : 'ع'
   renderFinder()
+  renderCorpusWarning(lastCorpus)
   // The pill keeps its state and changes language with everything else.
   if (!$('service-pill').hidden) {
     const el = $('service-pill')
@@ -449,6 +458,30 @@ function openDestination(url) {
   })
 }
 
+/**
+ * Show the unverified-corpus warning, if the backend says the corpus is one.
+ *
+ * Driven by /capabilities `corpus.verified`, which comes from the published
+ * manifest — so it cannot be forgotten when the corpus is replaced, and it
+ * disappears by itself the moment a verified corpus is published.
+ */
+function renderCorpusWarning(corpus) {
+  const el = $('corpus-warning')
+  // A missing flag means an older backend that predates any unverified
+  // publish; the safe reading of absent is "verified".
+  if (!corpus || corpus.verified !== false) {
+    el.hidden = true
+    return
+  }
+  const s = S()
+  el.textContent = ''
+  const title = document.createElement('strong')
+  title.textContent = s.corpusUnverifiedTitle
+  el.appendChild(title)
+  el.appendChild(document.createTextNode(s.corpusUnverified))
+  el.hidden = false
+}
+
 /* --- Service status ---------------------------------------------------------
  *
  * Reports whether CHAT can answer. The finder is deliberately excluded: it
@@ -509,6 +542,8 @@ async function refreshCapabilities() {
       // `modes` is the newer, per-feature block; `ready` is the older single
       // flag. Prefer the first, fall back to the second, so this panel works
       // against a backend that has not been redeployed yet.
+      renderCorpusWarning(caps.corpus)
+      lastCorpus = caps.corpus ?? null
       const ready = caps.modes ? caps.modes.ready : caps.ready
       setServicePill(ready ? 'ok' : 'degraded')
       if (!ready) showStatus(S().chatDegradedNote)

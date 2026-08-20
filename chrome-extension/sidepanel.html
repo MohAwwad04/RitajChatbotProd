@@ -35,6 +35,12 @@
          never interleaved with the transcript. -->
     <div id="status" class="status" role="status" aria-live="polite" hidden></div>
 
+    <!-- Shown whenever the published corpus did not pass the Ritaj-only source
+         policy. Deliberately persistent and above everything else: a student
+         acting on a fabricated date is the harm this exists to prevent, and a
+         warning that scrolls away or fades has not prevented it. -->
+    <div id="corpus-warning" class="corpus-warning" role="status" hidden></div>
+
     <!-- The page finder. Deliberately ABOVE the transcript and outside it: it
          is the feature that works with no corpus, no model and no network, so
          it must not scroll away with the conversation or vanish on the

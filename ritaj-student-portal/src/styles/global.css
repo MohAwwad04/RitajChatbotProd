@@ -383,3 +383,17 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(199, 154, 70
   .topic-row__meta { display: none; }
   .destination-row__pills { display: none; }
 }
+
+/* Unverified corpus warning — the strongest weight in the portal, deliberately.
+   Everything else here is calm because the product is calm; this is the one
+   state where a student acting on what they read may be acting on placeholder
+   text. */
+.corpus-warning {
+  padding: 12px 20px;
+  color: #7a4b00;
+  background: #fff7e6;
+  border-block-end: 2px solid var(--gold);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+.corpus-warning strong { display: block; margin-block-end: 2px; }

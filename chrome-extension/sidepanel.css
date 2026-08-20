@@ -304,3 +304,20 @@ body {
 /* Source links are anchors again only after links.js has cleared them; a
    citation that failed validation is dropped, never rendered inert. */
 .links a { color: var(--brand); background: var(--brand-soft); }
+
+/* --- Unverified corpus warning ---------------------------------------------
+ *
+ * The strongest visual weight in the panel, on purpose. Everything else here is
+ * calm because the product is calm; this is the one state where a student
+ * acting on what they read could be acting on placeholder text.
+ */
+.corpus-warning {
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--warn-ink);
+  background: var(--warn-bg);
+  border-bottom: 2px solid var(--gold);
+}
+.corpus-warning[hidden] { display: none; }
+.corpus-warning strong { display: block; margin-bottom: 2px; }
