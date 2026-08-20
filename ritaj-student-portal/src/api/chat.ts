@@ -47,7 +47,7 @@ export type StreamCallbacks = {
   // `code` is the backend's stable error code when it sent one, so the UI can
   // choose its own wording (and its own advice) per failure rather than
   // showing one generic sentence for every possible cause.
-  onError?: (message: string, code?: string) => void
+  onError?: (message: string, code?: string, requestId?: string) => void
   onDone?: () => void
 }
 
@@ -62,6 +62,48 @@ export type ChatMeta = {
   // random: it identifies a chat, not a student. There is deliberately no name
   // field — the portal does not ask for one (roadmap Phase 8).
   sessionId?: string
+}
+
+/**
+ * Why the request never produced a response.
+ *
+ * `fetch` rejects with an opaque `TypeError: "Failed to fetch"` for DNS failure,
+ * a refused connection, a TLS problem, a blocked request and a CORS rejection
+ * alike — the Fetch spec deliberately withholds which, because distinguishing
+ * them would let any page probe the user's network. So this classifies what it
+ * honestly can (offline, timed out, cancelled) and says plainly that it cannot
+ * separate the rest, rather than guessing at a cause and being wrong.
+ *
+ * The portal calls its own origin, so "unreachable" here almost always means the
+ * server itself is down, restarting, or asleep — which is worth saying, because
+ * "check your connection" is misleading advice when the student's connection is
+ * demonstrably fine (they loaded this page over it).
+ */
+export type TransportFailure = { code: string; detail?: string }
+
+export function describeTransportFailure(err: unknown): TransportFailure {
+  const error = err as { name?: string; message?: string }
+
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return { code: 'OFFLINE' }
+  }
+  if (error?.name === 'TimeoutError') return { code: 'TIMEOUT' }
+  if (error?.name === 'AbortError') return { code: 'ABORTED' }
+  if (error?.name === 'TypeError') {
+    // Keep the browser's own wording as detail — it differs per engine and is
+    // the only thing a bug report can be correlated against.
+    return { code: 'UNREACHABLE', detail: error.message }
+  }
+  return { code: 'UNKNOWN', detail: error?.message }
+}
+
+/** A status-derived code for a response whose body was not the expected JSON. */
+function statusCode(status: number): string {
+  if (status === 503) return 'STARTING_OR_ASLEEP'
+  if (status === 502 || status === 504) return 'GATEWAY'
+  if (status === 429) return 'RATE_LIMITED'
+  if (status === 413) return 'REQUEST_TOO_LARGE'
+  return 'HTTP_ERROR'
 }
 
 export async function streamChat(
@@ -105,9 +147,16 @@ export async function streamChat(
         code = typeof body?.code === 'string' ? body.code : null
         message = typeof body?.message === 'string' ? body.message : null
       } catch {
-        /* a non-JSON body — fall back to the status below */
+        // Not our JSON. A sleeping or still-building Space is served an HTML
+        // page by the platform proxy, never by this application, so the status
+        // is the only signal left — and it is a much better one than the bare
+        // number the UI used to print.
+        code = statusCode(response.status)
       }
-      callbacks.onError?.(message ?? `HTTP ${response.status}`, code ?? undefined)
+      // The request id is the join key to the protected server log, so a
+      // failure can be reported without repeating the question.
+      const requestId = response.headers.get('X-Request-ID') ?? undefined
+      callbacks.onError?.(message ?? `HTTP ${response.status}`, code ?? undefined, requestId)
       return finish()
     }
 
@@ -162,8 +211,10 @@ export async function streamChat(
       }
     }
   } catch (err) {
-    if ((err as Error).name !== 'AbortError') {
-      callbacks.onError?.((err as Error).message)
+    const failure = describeTransportFailure(err)
+    // A cancellation is the student pressing stop, not a failure to report.
+    if (failure.code !== 'ABORTED') {
+      callbacks.onError?.(failure.detail ?? failure.code, failure.code)
     }
   } finally {
     finish()

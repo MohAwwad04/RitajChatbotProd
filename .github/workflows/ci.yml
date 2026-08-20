@@ -82,6 +82,12 @@ jobs:
       - name: Privacy disclosures
         run: python scripts/check_privacy.py
 
+      # A public error code with no wording in a client is not a crash — it is
+      # the client confidently telling a student something untrue about why the
+      # product did not work. Both clients, both languages.
+      - name: Error message coverage
+        run: python scripts/check_error_messages.py
+
       # Advisory for the same reason the completeness gate is: it fails on
       # missing *people*, not missing code, and blocking every pull request on
       # an unassigned duty teaches the team to ignore a red job. It is listed as
@@ -198,7 +204,11 @@ jobs:
       # The client-side destination validator is a deliberate second
       # implementation of the URL policy, so it carries its own tests.
       - name: Extension validator tests
-        run: node --test chrome-extension/navigation.test.mjs
+        run: >
+          node --test
+          chrome-extension/navigation.test.mjs
+          chrome-extension/links.test.mjs
+          chrome-extension/transport.test.mjs
 
       - name: Build the extension package
         run: python scripts/package_extension.py --verify

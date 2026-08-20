@@ -11,6 +11,7 @@
 
 import { REGISTRY_VERSION, resolveLocally, usableActions } from './actions.js'
 import { validateLinks } from './links.js'
+import { describeTransportFailure, statusCode } from './transport.js'
 import { validateAction } from './navigation.js'
 
 /* global BASE_URL, MAX_MESSAGE_CHARS, chrome */
@@ -53,6 +54,9 @@ const STRINGS = {
     codes: {
       INITIALIZING: 'The assistant is starting up. Try again in a moment.',
       NOT_READY: 'The assistant is temporarily unavailable. Try again shortly.',
+      // Distinct from NOT_READY on purpose: retrying cannot help, so the message
+      // must not suggest it, and it names what does still work.
+      NO_CORPUS: 'Factual answers are switched off: no approved Ritaj sources have been published yet. The page finder above still works.',
       RATE_LIMITED: 'You’re sending messages too quickly. Wait a moment and try again.',
       LLM_BUDGET_EXHAUSTED:
         'The assistant has reached today’s usage limit. Try again tomorrow, or use the linked Ritaj page directly.',
@@ -60,6 +64,17 @@ const STRINGS = {
       LLM_TIMEOUT: 'That took too long. Try again, or ask a shorter question.',
       BUSY: 'The assistant is busy right now. Try again shortly.',
       REQUEST_TOO_LARGE: 'That message is too long. Please shorten it.',
+      // Transport failures: the request never reached the backend, or never
+      // came back. The panel calls a DIFFERENT origin than the page it sits
+      // beside, so unlike the portal it genuinely cannot tell whether the
+      // student's connection or the backend is at fault — and says so.
+      OFFLINE: 'You appear to be offline. The page finder above still works.',
+      TIMEOUT: 'The backend took too long to respond. It may be starting up — try again in a minute.',
+      UNREACHABLE: 'Could not reach the backend. It may be asleep or restarting; the browser does not reveal the exact cause. The page finder above still works.',
+      STARTING_OR_ASLEEP: 'The backend is starting up, or was asleep. The first request takes about a minute.',
+      GATEWAY: 'The hosting platform could not reach the backend — usually a redeploy. Try again in a minute.',
+      HTTP_ERROR: 'The backend replied with an unexpected error.',
+      UNKNOWN: 'The request failed for an unrecognised reason.',
     },
     suggestions: [
       'How do I register for courses?',
@@ -103,12 +118,20 @@ const STRINGS = {
     codes: {
       INITIALIZING: 'المساعد قيد التشغيل. حاول بعد لحظات.',
       NOT_READY: 'المساعد غير متاح مؤقتاً. حاول بعد قليل.',
+      NO_CORPUS: 'الإجابات المبنية على المصادر متوقفة: لم تُنشر بعد أي مصادر معتمدة من ريتاج. لا يزال البحث عن الصفحات أعلاه يعمل.',
       RATE_LIMITED: 'ترسل رسائل بسرعة كبيرة. انتظر لحظة ثم حاول مجدداً.',
       LLM_BUDGET_EXHAUSTED: 'بلغ المساعد حد الاستخدام اليومي. حاول غداً أو افتح صفحة ريتاج مباشرة.',
       LLM_UNAVAILABLE: 'خدمة الإجابة غير متاحة حالياً. حاول بعد قليل.',
       LLM_TIMEOUT: 'استغرقت الإجابة وقتاً طويلاً. حاول مجدداً أو اطرح سؤالاً أقصر.',
       BUSY: 'المساعد مشغول حالياً. حاول بعد قليل.',
       REQUEST_TOO_LARGE: 'الرسالة طويلة جداً. يرجى اختصارها.',
+      OFFLINE: 'يبدو أنك غير متصل بالإنترنت. لا يزال البحث عن الصفحات أعلاه يعمل.',
+      TIMEOUT: 'استغرق الخادم وقتاً طويلاً للرد. قد يكون قيد التشغيل — حاول بعد دقيقة.',
+      UNREACHABLE: 'تعذّر الوصول إلى الخادم. قد يكون نائماً أو يعيد التشغيل؛ لا يكشف المتصفح السبب الدقيق. لا يزال البحث عن الصفحات أعلاه يعمل.',
+      STARTING_OR_ASLEEP: 'الخادم قيد التشغيل أو كان نائماً. تستغرق أول محاولة نحو دقيقة.',
+      GATEWAY: 'تعذّر على المنصة الوصول إلى الخادم — غالباً أثناء إعادة النشر. حاول بعد دقيقة.',
+      HTTP_ERROR: 'ردّ الخادم بخطأ غير متوقع.',
+      UNKNOWN: 'فشل الطلب لسبب غير معروف.',
     },
     suggestions: [
       'كيف أسجّل المساقات؟',
@@ -572,7 +595,10 @@ async function streamChat(message, history, callbacks, signal) {
     try {
       code = (await response.json())?.code ?? null
     } catch {
-      /* non-JSON error body */
+      // Not our JSON — a sleeping or building Space is served an HTML page by
+      // the platform proxy. The status is then the only signal, and a far
+      // better one than "HTTP 503".
+      code = statusCode(response.status)
     }
     const err = new Error(code || `HTTP ${response.status}`)
     err.code = code
@@ -726,7 +752,11 @@ async function send(preset) {
         announce(S().stopped)
       }
     } else {
-      const text = messageForCode(err?.code, null)
+      // A coded refusal from the backend keeps its own message; anything else
+      // never reached the backend, so classify the transport failure instead of
+      // reporting one sentence for every possible cause.
+      const code = err?.code ?? describeTransportFailure(err).code
+      const text = messageForCode(code, null)
       showStatus(text)
       showRequestId(err?.requestId)
       show(raw || text)

@@ -38,7 +38,17 @@ export const dict = {
       LLM_TIMEOUT: 'استغرقت الإجابة وقتاً طويلاً. حاول مجدداً أو اطرح سؤالاً أقصر.',
       BUSY: 'المساعد مشغول حالياً. حاول بعد قليل.',
       REQUEST_TOO_LARGE: 'الرسالة طويلة جداً. يرجى اختصارها.',
+      // Transport failures — the request never reached the service, or never
+      // came back. Each says what is actually known, and what to do about it.
+      OFFLINE: 'جهازك غير متصل بالإنترنت. لا يزال بحث الصفحات يعمل دون اتصال.',
+      TIMEOUT: 'استغرق الخادم وقتاً طويلاً للرد. قد يكون قيد التشغيل — حاول بعد دقيقة.',
+      UNREACHABLE: 'تعذّر الوصول إلى الخادم. اتصالك يعمل (فقد حمّلت هذه الصفحة)، لذا الخادم على الأرجح متوقف أو يعيد التشغيل. لا يمكن للمتصفح تحديد السبب بدقة.',
+      STARTING_OR_ASLEEP: 'الخدمة قيد التشغيل أو كانت نائمة. تستغرق أول محاولة نحو دقيقة.',
+      GATEWAY: 'تعذّر على المنصة الوصول إلى التطبيق. غالباً أثناء إعادة النشر — حاول بعد دقيقة.',
+      HTTP_ERROR: 'ردّ الخادم بخطأ غير متوقع.',
+      UNKNOWN: 'فشل الطلب لسبب غير معروف.',
     } as Record<string, string>,
+    error_reference: 'الرقم المرجعي',
     unofficial: 'مشروع طلابي مستقل — ليس خدمة رسمية من جامعة بيرزيت',
 
     search_chats: 'ابحث في المحادثات',
@@ -185,7 +195,17 @@ export const dict = {
       LLM_TIMEOUT: 'That took too long. Try again, or ask a shorter question.',
       BUSY: 'The assistant is busy right now. Try again shortly.',
       REQUEST_TOO_LARGE: 'That message is too long. Please shorten it.',
+      // Transport failures — the request never reached the service, or never
+      // came back. Each says what is actually known, and what to do about it.
+      OFFLINE: 'Your device is offline. The page finder still works without a connection.',
+      TIMEOUT: 'The server took too long to respond. It may be starting up — try again in a minute.',
+      UNREACHABLE: "Couldn't reach the server. Your connection works (you loaded this page over it), so the server is most likely down or restarting. The browser does not reveal the exact cause.",
+      STARTING_OR_ASLEEP: 'The service is starting up, or was asleep. The first request takes about a minute.',
+      GATEWAY: 'The hosting platform could not reach the app — usually a redeploy in progress. Try again in a minute.',
+      HTTP_ERROR: 'The server replied with an unexpected error.',
+      UNKNOWN: 'The request failed for an unrecognised reason.',
     } as Record<string, string>,
+    error_reference: 'Reference',
     unofficial: 'An independent student project — not an official Birzeit University service',
 
     search_chats: 'Search conversations',

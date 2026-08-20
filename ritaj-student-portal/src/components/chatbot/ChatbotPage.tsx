@@ -144,13 +144,16 @@ export function ChatbotPage({ darkMode, onToggleTheme, onBack, pendingQuestion, 
           // Prefer our own wording for a known code, then whatever the server
           // wrote, and only fall back to the generic "couldn't reach" line when
           // there genuinely was no response to read.
-          onError: (message, code) =>
-            render(
-              text ||
-                (code && s.error_codes[code]) ||
-                message ||
-                s.error_connect,
-            ),
+          onError: (message, code, requestId) => {
+            // Our wording for a code we recognise, then whatever the server
+            // wrote, and only then the generic line — which now means "no
+            // response at all and no idea why", not "something went wrong".
+            const reason =
+              (code && s.error_codes[code]) || message || s.error_connect
+            // The reference is what lets a student report a failure without
+            // repeating their question; only shown when the server issued one.
+            render(text || (requestId ? `${reason}\n\n${s.error_reference}: ${requestId}` : reason))
+          },
           onDone: () => setThinking(false),
         },
         // The session id groups this conversation's turns in the aggregate log.
@@ -158,7 +161,8 @@ export function ChatbotPage({ darkMode, onToggleTheme, onBack, pendingQuestion, 
         { history, sessionId: conversationId },
       )
     },
-    [currentId, input, lang, messages, patchMessages, s.error_connect, s.error_codes, thinking],
+    [currentId, input, lang, messages, patchMessages, s.error_connect, s.error_codes,
+     s.error_reference, thinking],
   )
 
   // A question picked on the home view arrives as a prop; send it once.
