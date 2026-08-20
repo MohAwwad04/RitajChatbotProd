@@ -15,12 +15,89 @@
 // file is not a trusted file, and the point of the client-side check is that it
 // does not trust its own inputs either.
 //
-// No destination is approved yet: every action in data/navigation.yaml is
-// `enabled: false` with an empty `approved_by`, pending a human opening each
-// URL in a signed-out browser. The panel renders no page-finder buttons in
-// this state, which is the honest outcome — see cowork_ritaj/human-actions.md
-// section H4.
+// 4 approved destinations.
 
-export const REGISTRY_VERSION = '4f53cda18c2b'
+export const REGISTRY_VERSION = '60b6d601f739'
 
-export const BUNDLED_ACTIONS = []
+export const BUNDLED_ACTIONS = [
+    {
+      "id": "academic-calendar",
+      "label_ar": "فتح التقويم الأكاديمي",
+      "label_en": "Open the academic calendar",
+      "url": "https://ritaj.birzeit.edu/academic-calendar",
+      "auth_required": false,
+      "requires_confirmation": true,
+      "intents_ar": [
+        "افتح التقويم الاكاديمي",
+        "صفحه التقويم الاكاديمي",
+        "اعرض التقويم"
+      ],
+      "intents_en": [
+        "open the academic calendar",
+        "show me the academic calendar",
+        "go to the calendar page"
+      ],
+      "min_confidence": 0.75
+    },
+    {
+      "id": "course-registration",
+      "label_ar": "فتح تسجيل المساقات",
+      "label_en": "Open course registration",
+      "url": "https://ritaj.birzeit.edu/reg/",
+      "auth_required": true,
+      "requires_confirmation": true,
+      "intents_ar": [
+        "افتح تسجيل المساقات",
+        "صفحه التسجيل",
+        "اذهب الى التسجيل",
+        "وين اسجل المساقات",
+        "بدي انزل مساقات"
+      ],
+      "intents_en": [
+        "open course registration",
+        "go to registration",
+        "open the registration page",
+        "where do i register for courses",
+        "take me to course registration"
+      ],
+      "min_confidence": 0.75
+    },
+    {
+      "id": "message-boards",
+      "label_ar": "فتح لوحات الإعلانات",
+      "label_en": "Open the message boards",
+      "url": "https://ritaj.birzeit.edu/bzu-msgs/boards",
+      "auth_required": true,
+      "requires_confirmation": true,
+      "intents_ar": [
+        "افتح لوحات الاعلانات",
+        "اعرض الاعلانات",
+        "افتح اللوحات"
+      ],
+      "intents_en": [
+        "open the message boards",
+        "show announcements",
+        "open the boards"
+      ],
+      "min_confidence": 0.8
+    },
+    {
+      "id": "ritaj-home",
+      "label_ar": "فتح بوابة ريتاج",
+      "label_en": "Open the Ritaj portal",
+      "url": "https://ritaj.birzeit.edu/",
+      "auth_required": true,
+      "requires_confirmation": true,
+      "intents_ar": [
+        "افتح ريتاج",
+        "اذهب الى ريتاج",
+        "افتح بوابه ريتاج"
+      ],
+      "intents_en": [
+        "open ritaj",
+        "go to ritaj",
+        "open the ritaj portal"
+      ],
+      "min_confidence": 0.9
+    }
+  ]

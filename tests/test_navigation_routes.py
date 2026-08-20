@@ -6,9 +6,10 @@ exists, and it was the feature most reliably broken: every request went through
 sources — the current and intended state) refused to resolve a destination it
 had already reviewed and could have returned from a YAML file.
 
-These tests pin the separation. They assert on *readiness*, not on any
-particular action being enabled, so they keep working when the five candidate
-destinations are approved and switched on.
+These tests pin the separation. They assert on *readiness* and derive any
+expectation about approvals from the registry file itself, so enabling a
+destination is never what breaks them — four of the five were enabled on
+20 Aug 2026 and none of this needed rewriting for that reason.
 """
 
 import pytest
@@ -44,10 +45,10 @@ def _client():
 def enabled_action(tmp_path, monkeypatch):
     """A registry with exactly one enabled, approved action.
 
-    Every action in the real `data/navigation.yaml` is `enabled: false` pending
-    human URL confirmation, so a test that needs a working destination has to
-    supply its own. Using the real file would make these tests pass or fail on
-    an approval decision, which is not what they are measuring.
+    A test that needs a specific destination supplies its own rather than
+    reaching for `data/navigation.yaml`, whose contents track approval decisions
+    rather than code. Using the real file would make these assertions pass or
+    fail on whether somebody confirmed a URL that morning.
     """
     registry = tmp_path / "navigation.yaml"
     registry.write_text(
@@ -131,12 +132,30 @@ def test_only_enabled_actions_are_listed(enabled_action):
 
 
 def test_disabled_actions_are_counted_but_never_named():
-    """The real registry: five candidates, none approved, none described."""
+    """A disabled candidate is counted, never described — the kill switch.
+
+    Derived from the shipped registry rather than asserting a fixed count. The
+    first version asserted `actions == []`, which was a snapshot of "nothing
+    approved yet" and broke the day a reviewer confirmed a destination. A test
+    that fails on correct progress just teaches people to edit the assertion.
+    """
+    import yaml
+
+    declared = yaml.safe_load(
+        navigation.REGISTRY_PATH.read_text(encoding="utf-8")) or []
+    disabled = [r for r in declared if not r.get("enabled")]
+
     with _client() as c:
         body = c.get("/v2/navigation/actions").json()
-    assert body["actions"] == []
-    assert body["pending"] == navigation.declared_count()
-    assert body["pending"] > 0, "the fixture registry should still declare candidates"
+
+    listed = {a["id"] for a in body["actions"]}
+    assert body["pending"] == len(disabled)
+    serialized = str(body)
+    for record in disabled:
+        assert record["id"] not in listed
+        assert record["destination"] not in serialized, (
+            f"disabled destination {record['id']} was named to a client"
+        )
 
 
 def test_resolve_matches_a_reviewed_intent(enabled_action):
@@ -252,12 +271,26 @@ def test_modes_report_navigation_separately(enabled_action, reset_readiness):
     assert modes["ready"] is False               # so full chat is not ready
 
 
-def test_navigation_not_ready_when_every_action_is_disabled(reset_readiness):
-    """The real registry today: honest about having no working destination."""
-    with _client() as c:
-        modes = c.get("/capabilities").json()["modes"]
-    assert modes["navigation_ready"] is False
-    assert modes["ready"] is False
+def test_navigation_not_ready_when_nothing_is_approved(tmp_path, monkeypatch,
+                                                       reset_readiness):
+    """With nothing approved, the service says so rather than showing an empty list.
+
+    Uses its own empty registry instead of the shipped one. Asserting this
+    against `data/navigation.yaml` measured an approval decision rather than the
+    code, and inverted the moment a destination was enabled.
+    """
+    empty = tmp_path / "navigation.yaml"
+    empty.write_text("[]\n", encoding="utf-8")
+    monkeypatch.setattr(navigation, "REGISTRY_PATH", empty)
+    navigation.reload_registry()
+    try:
+        with _client() as c:
+            modes = c.get("/capabilities").json()["modes"]
+        assert modes["navigation_ready"] is False
+        assert modes["ready"] is False
+    finally:
+        monkeypatch.undo()
+        navigation.reload_registry()
 
 
 def test_ready_flag_still_means_full_chat(enabled_action, reset_readiness):

@@ -13,10 +13,18 @@
 # The model NEVER produces a URL. The most it can do is name an `id` that
 # already exists here (see ADR-002). An unknown id resolves to nothing.
 #
-# STATUS (4 Aug 2026): every action is `enabled: false`. The destinations are
-# candidates from the roadmap's research; none has been confirmed to exist and
-# be public, and none has a named approver. Enabling one is a deliberate,
-# reviewed act — set `enabled: true` and fill `approved_by` together.
+# STATUS (20 Aug 2026): four actions are live; one is not.
+#
+# Every destination was opened in a signed-out browser by the approver named in
+# each row. `ritaj-home`, `course-registration`, `academic-calendar` and
+# `message-boards` loaded and are enabled. `course-browser`
+# (/hemis/courses) did NOT load and stays `enabled: false` — the row is kept so
+# the path remains declared for the extension's ALLOWED_PATHS parity gate, and
+# so the next reviewer can see it was checked rather than overlooked.
+#
+# Enabling one is a deliberate, reviewed act — set `enabled: true` and fill
+# `approved_by` together. Automated confirmation is impossible: Ritaj answers 403
+# to non-browser requests.
 #
 # `enabled: false` is also the incident rollback: flipping it and redeploying
 # withdraws a bad destination in minutes, without waiting for a Chrome Web Store
@@ -40,9 +48,9 @@
   destination: https://ritaj.birzeit.edu/reg/
   auth_required: true
   requires_confirmation: true
-  enabled: false
+  enabled: true
   owner: registration-office
-  approved_by: ""
+  approved_by: "MohAwwad04 (signed-out browser check, 2026-08-20)"
   min_confidence: 0.75
   safe_query_keys: []
   source_ids: [registration-instructions-ar, registration-instructions-en]
@@ -65,9 +73,9 @@
   destination: https://ritaj.birzeit.edu/academic-calendar
   auth_required: false
   requires_confirmation: true
-  enabled: false
+  enabled: true
   owner: registration-office
-  approved_by: ""
+  approved_by: "MohAwwad04 (signed-out browser check, 2026-08-20)"
   min_confidence: 0.75
   safe_query_keys: []
   source_ids: [academic-calendar-ar, academic-calendar-en]
@@ -88,7 +96,10 @@
   requires_confirmation: true
   enabled: false
   owner: registration-office
-  approved_by: ""
+  approved_by: ""   # CHECKED 2026-08-20: /hemis/courses did NOT load.
+                    # Do not enable without a working replacement path.
+                    # The path stays declared here so the extension's
+                    # ALLOWED_PATHS parity gate keeps covering it.
   min_confidence: 0.75
   # A term selector is the one parameter worth carrying; anything else on this
   # URL would be a filter the assistant guessed at.
@@ -110,9 +121,9 @@
   destination: https://ritaj.birzeit.edu/bzu-msgs/boards
   auth_required: true
   requires_confirmation: true
-  enabled: false
+  enabled: true
   owner: student-affairs
-  approved_by: ""
+  approved_by: "MohAwwad04 (signed-out browser check, 2026-08-20)"
   min_confidence: 0.8
   safe_query_keys: []
   source_ids: [message-boards]
@@ -131,9 +142,9 @@
   destination: https://ritaj.birzeit.edu/
   auth_required: true
   requires_confirmation: true
-  enabled: false
+  enabled: true
   owner: computer-center
-  approved_by: ""
+  approved_by: "MohAwwad04 (signed-out browser check, 2026-08-20)"
   # Highest floor of any action: "open Ritaj" is what a weak match degrades
   # into, so it must never win by default.
   min_confidence: 0.9

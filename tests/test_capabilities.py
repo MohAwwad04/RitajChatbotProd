@@ -47,13 +47,29 @@ def test_only_approved_sources_are_named():
 
 
 def test_review_queue_entries_are_counted_but_not_described():
+    """An unapproved SOURCE is never described. A navigation label may share words.
+
+    Scoped to the blocks that describe the corpus, not to `str(body)`. Searching
+    the whole payload conflated two different things: the source titled
+    «التقويم الأكاديمي» is unapproved and must not be described, while the
+    navigation button «فتح التقويم الأكاديمي» is approved, enabled, and exists
+    precisely to be named. The button's label contains the document's title as a
+    substring, so a whole-body search reported a leak that was not one — and
+    would keep doing so for any reviewed button sharing a noun with a document.
+    """
     body = _capabilities()
     report = source_policy.load_and_validate(check_content=False)
-    pending_titles = {s.title for s in report.sources if not s.approved}
+    pending = [s for s in report.sources if not s.approved]
 
-    serialized = str(body)
-    for title in pending_titles:
-        assert title not in serialized, f"unapproved source {title!r} leaked into /capabilities"
+    described = str({"topics": body["topics"], "corpus": body["corpus"]})
+    for source in pending:
+        assert source.title not in described, (
+            f"unapproved source {source.title!r} leaked into /capabilities"
+        )
+        assert source.id not in described, (
+            f"unapproved source id {source.id!r} leaked into /capabilities"
+        )
+    assert pending, "no unapproved sources left — this test proves nothing now"
 
 
 # --- navigation --------------------------------------------------------------
@@ -62,10 +78,24 @@ def test_only_enabled_actions_are_named_and_the_rest_are_counted():
     enabled = {a.id for a in navigation.load_registry().values() if a.enabled}
 
     assert {a["id"] for a in body["navigation"]} == enabled
-    declared = yaml.safe_load(navigation.REGISTRY_PATH.read_text(encoding="utf-8")) or []
-    assert body["pending_navigation"] == len(declared) - len(enabled)
+    declared_records = yaml.safe_load(
+        navigation.REGISTRY_PATH.read_text(encoding="utf-8")) or []
+    assert body["pending_navigation"] == len(declared_records) - len(enabled)
+
     # The kill switch is meaningful only if a disabled destination is invisible.
-    assert "ritaj.birzeit.edu/reg/" not in str(body["navigation"])
+    # Derived from the file rather than naming one URL: the previous version
+    # hard-coded /reg/, which silently stopped testing anything the day /reg/
+    # was approved — the assertion still passed, against the wrong action.
+    serialized = str(body["navigation"])
+    disabled = [r for r in declared_records if not r.get("enabled")]
+    for record in disabled:
+        assert record["destination"] not in serialized, (
+            f"disabled destination {record['id']} leaked into /capabilities"
+        )
+    assert disabled, (
+        "every action is enabled, so this test no longer proves the kill switch "
+        "hides anything — disable one, or delete this assertion deliberately"
+    )
 
 
 def test_declared_count_sees_actions_load_registry_drops(tmp_path):

@@ -194,8 +194,16 @@ def test_empty_registry_means_no_navigation(tmp_path, monkeypatch):
     navigation.reload_registry()
 
 
-def test_shipped_registry_is_valid_and_disabled():
-    """The repository's registry: structurally sound, and nothing enabled yet."""
+def test_shipped_registry_is_valid_and_every_enabled_action_has_an_approver():
+    """The repository's registry: structurally sound, and nothing enabled by accident.
+
+    This used to assert that *every* action was disabled, which was true on the
+    day it was written and stopped being true the moment a reviewer confirmed a
+    destination. Pinning a snapshot that way turns an approval into a test
+    failure and teaches whoever hits it to edit the assertion — so it now pins
+    the property that actually matters and survives approval: an enabled action
+    names the person who approved it.
+    """
     import yaml
 
     records = yaml.safe_load(navigation.REGISTRY_PATH.read_text(encoding="utf-8"))
@@ -206,9 +214,11 @@ def test_shipped_registry_is_valid_and_disabled():
             if k in navigation.Action.__dataclass_fields__
         })
         assert navigation._structural_problem(action.destination) is None, action.id
-        assert action.enabled is False, (
-            f"{action.id} is enabled — confirm the destination and approver first"
-        )
+        if action.enabled:
+            assert action.approved_by.strip(), (
+                f"{action.id} is enabled with an empty approved_by — the row would be "
+                "dropped at load, so it looks approved in the file and does nothing"
+            )
 
 
 # --- registry hygiene --------------------------------------------------------
