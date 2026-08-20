@@ -44,7 +44,10 @@ export type StreamCallbacks = {
   onRepair?: (answer: string) => void
   onLinks?: (links: PageLink[]) => void
   onAbout?: (answer: string, images: TeamImage[]) => void
-  onError?: (message: string) => void
+  // `code` is the backend's stable error code when it sent one, so the UI can
+  // choose its own wording (and its own advice) per failure rather than
+  // showing one generic sentence for every possible cause.
+  onError?: (message: string, code?: string) => void
   onDone?: () => void
 }
 
@@ -88,7 +91,23 @@ export async function streamChat(
       signal,
     })
     if (!response.ok || !response.body) {
-      callbacks.onError?.(`HTTP ${response.status}`)
+      // The backend refuses with a STABLE CODE and a written message
+      // (src/ritaj/errors.py), e.g. {"code":"NO_CORPUS","message":"..."}.
+      // This used to discard all of it and report `HTTP 503`, which the UI then
+      // replaced with "Couldn't reach the assistant right now. Please try
+      // again." — a network-failure message for a service that answered
+      // clearly, and advice ("try again") that can never come true when the
+      // cause is an unpublished corpus.
+      let code: string | null = null
+      let message: string | null = null
+      try {
+        const body = await response.json()
+        code = typeof body?.code === 'string' ? body.code : null
+        message = typeof body?.message === 'string' ? body.message : null
+      } catch {
+        /* a non-JSON body — fall back to the status below */
+      }
+      callbacks.onError?.(message ?? `HTTP ${response.status}`, code ?? undefined)
       return finish()
     }
 
@@ -134,7 +153,7 @@ export async function streamChat(
             callbacks.onAbout?.(event.answer as string, (event.images as TeamImage[]) ?? [])
             break
           case 'error':
-            callbacks.onError?.(event.message as string)
+            callbacks.onError?.(event.message as string, event.code as string | undefined)
             break
           case 'done':
             return finish()

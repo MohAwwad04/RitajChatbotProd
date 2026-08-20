@@ -298,3 +298,48 @@ def test_ready_flag_still_means_full_chat(enabled_action, reset_readiness):
     with _client() as c:
         modes = c.get("/capabilities").json()["modes"]
     assert modes["ready"] == (modes["retrieval_ready"] and modes["generation_ready"])
+
+
+# --- an absent corpus is not an outage ---------------------------------------
+def test_an_absent_corpus_gets_its_own_code(reset_readiness, monkeypatch):
+    """"Try again shortly" is advice that can never come true here.
+
+    The live portal showed "Couldn't reach the assistant right now. Please try
+    again." for a service that had answered clearly with a 503 and a written
+    reason. Two separate faults produced that: the client discarded the body,
+    and the server flattened "no corpus has been approved" into the same
+    NOT_READY it uses for a genuinely transient outage.
+    """
+    from ritaj import errors, readiness
+    from ritaj.config import settings
+
+    monkeypatch.setattr(settings, "startup_init", True)
+    with _client() as c:
+        # Set the state INSIDE the context: entering it runs the lifespan, which
+        # kicks off background initialization and would overwrite anything set
+        # beforehand.
+        readiness._set("failed", error="CORPUS_UNAVAILABLE")
+        r = c.post("/v2/chat", json={"message": "when does registration open?"})
+    assert r.status_code == 503
+    body = r.json()
+    assert body["code"] == "NO_CORPUS"
+    # No retry advice, because retrying cannot help.
+    assert "retry_after" not in body
+    # And it says what still works, so the student has somewhere to go.
+    assert "page finder" in body["message"].lower()
+    assert errors.NO_CORPUS().code == "NO_CORPUS"
+
+
+def test_a_transient_failure_still_says_try_again(reset_readiness, monkeypatch):
+    """The negative: NO_CORPUS must not swallow every failed state."""
+    from ritaj import readiness
+    from ritaj.config import settings
+
+    monkeypatch.setattr(settings, "startup_init", True)
+    with _client() as c:
+        readiness._set("failed", error="PROVIDER_UNREACHABLE")
+        r = c.post("/v2/chat", json={"message": "hello"})
+    assert r.status_code == 503
+    body = r.json()
+    assert body["code"] == "NOT_READY"
+    assert body["retry_after"] == 30

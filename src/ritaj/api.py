@@ -317,6 +317,12 @@ def _require_ready() -> None:
     state = readiness.state()
     if state in ("starting", "initializing"):
         raise errors.INITIALIZING(detail=f"state={state}", retry_after=10)
+    # An absent corpus is not an outage and will not clear on its own, so it
+    # gets its own code rather than being flattened into "try again shortly".
+    # The category is already public on /ready; reusing it here just means the
+    # chat surface stops contradicting the readiness surface.
+    if readiness.failure_code() == "CORPUS_UNAVAILABLE":
+        raise errors.NO_CORPUS(detail="no approved corpus published")
     raise errors.NOT_READY(detail=f"state={state}", retry_after=30)
 
 

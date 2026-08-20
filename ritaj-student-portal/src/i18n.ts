@@ -25,6 +25,20 @@ export const dict = {
     thinking: 'أبحث في الصفحات المعتمدة',
     new_chat: 'محادثة جديدة',
     error_connect: 'تعذّر الاتصال بالمساعد الآن. يرجى المحاولة مرة أخرى.',
+    // Per-code wording. The backend refuses with a stable code and the right
+    // advice differs per cause — telling a student to "try again" when no
+    // corpus has been approved is advice that can never come true.
+    error_codes: {
+      NO_CORPUS: 'الإجابات المبنية على المصادر متوقفة: لم تُنشر بعد أي مصادر معتمدة من ريتاج. لا يزال البحث عن الصفحات يعمل.',
+      NOT_READY: 'المساعد غير متاح مؤقتاً. حاول بعد قليل.',
+      INITIALIZING: 'المساعد قيد التشغيل. حاول بعد لحظات.',
+      RATE_LIMITED: 'ترسل رسائل بسرعة كبيرة. انتظر لحظة ثم حاول مجدداً.',
+      LLM_BUDGET_EXHAUSTED: 'بلغ المساعد حد الاستخدام اليومي. حاول غداً، أو افتح صفحة ريتاج مباشرة.',
+      LLM_UNAVAILABLE: 'خدمة الإجابة غير متاحة حالياً. حاول بعد قليل.',
+      LLM_TIMEOUT: 'استغرقت الإجابة وقتاً طويلاً. حاول مجدداً أو اطرح سؤالاً أقصر.',
+      BUSY: 'المساعد مشغول حالياً. حاول بعد قليل.',
+      REQUEST_TOO_LARGE: 'الرسالة طويلة جداً. يرجى اختصارها.',
+    } as Record<string, string>,
     unofficial: 'مشروع طلابي مستقل — ليس خدمة رسمية من جامعة بيرزيت',
 
     search_chats: 'ابحث في المحادثات',
@@ -161,6 +175,17 @@ export const dict = {
     thinking: 'Searching the approved pages',
     new_chat: 'New chat',
     error_connect: "Couldn't reach the assistant right now. Please try again.",
+    error_codes: {
+      NO_CORPUS: 'Factual answers are switched off: no approved Ritaj sources have been published yet. The page finder still works.',
+      NOT_READY: 'The assistant is temporarily unavailable. Try again shortly.',
+      INITIALIZING: 'The assistant is starting up. Try again in a moment.',
+      RATE_LIMITED: "You're sending messages too quickly. Wait a moment and try again.",
+      LLM_BUDGET_EXHAUSTED: "The assistant has reached today's usage limit. Try again tomorrow, or open the Ritaj page directly.",
+      LLM_UNAVAILABLE: 'The answering service is unavailable right now. Try again shortly.',
+      LLM_TIMEOUT: 'That took too long. Try again, or ask a shorter question.',
+      BUSY: 'The assistant is busy right now. Try again shortly.',
+      REQUEST_TOO_LARGE: 'That message is too long. Please shorten it.',
+    } as Record<string, string>,
     unofficial: 'An independent student project — not an official Birzeit University service',
 
     search_chats: 'Search conversations',

@@ -141,7 +141,16 @@ export function ChatbotPage({ darkMode, onToggleTheme, onBack, pendingQuestion, 
               current.map((m) => (m.id === assistantId ? { ...m, images } : m)),
             )
           },
-          onError: () => render(text || s.error_connect),
+          // Prefer our own wording for a known code, then whatever the server
+          // wrote, and only fall back to the generic "couldn't reach" line when
+          // there genuinely was no response to read.
+          onError: (message, code) =>
+            render(
+              text ||
+                (code && s.error_codes[code]) ||
+                message ||
+                s.error_connect,
+            ),
           onDone: () => setThinking(false),
         },
         // The session id groups this conversation's turns in the aggregate log.
@@ -149,7 +158,7 @@ export function ChatbotPage({ darkMode, onToggleTheme, onBack, pendingQuestion, 
         { history, sessionId: conversationId },
       )
     },
-    [currentId, input, lang, messages, patchMessages, s.error_connect, thinking],
+    [currentId, input, lang, messages, patchMessages, s.error_connect, s.error_codes, thinking],
   )
 
   // A question picked on the home view arrives as a prop; send it once.

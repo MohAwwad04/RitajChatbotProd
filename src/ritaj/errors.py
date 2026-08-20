@@ -58,6 +58,19 @@ NOT_READY = _err(
     "المساعد غير متاح مؤقتاً. يرجى المحاولة بعد قليل.",
 )
 
+# Distinct from NOT_READY because the honest advice is the opposite. NOT_READY
+# means "wait and retry"; this means "retrying will not help, and the page
+# finder is what you want instead". Telling a student to try again shortly when
+# no corpus has been approved is advice that can never come true, and it makes a
+# deliberate abstention look like an outage.
+NO_CORPUS = _err(
+    "NO_CORPUS", 503,
+    "Factual answers are switched off: no approved Ritaj sources have been "
+    "published yet. The page finder still works.",
+    "الإجابات المبنية على المصادر متوقفة: لم تُنشر بعد أي مصادر معتمدة من ريتاج. "
+    "لا يزال البحث عن الصفحات يعمل.",
+)
+
 LLM_UNAVAILABLE = _err(
     "LLM_UNAVAILABLE", 503,
     "The answering service is unavailable right now. Please try again shortly.",
