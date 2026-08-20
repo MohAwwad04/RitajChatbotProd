@@ -40,7 +40,12 @@ log = logging.getLogger("ritaj.llm")
 # Connect fast or fail; allow a long read for generation. The read budget is the
 # whole-answer ceiling, so it must exceed the slowest acceptable full answer
 # (Phase 7 SLO: p95 <= 12 s) with headroom for a cold provider.
-_TIMEOUT = httpx.Timeout(connect=5.0, read=90.0, write=10.0, pool=5.0)
+_TIMEOUT = httpx.Timeout(
+    connect=settings.llm_connect_timeout_seconds,
+    read=settings.llm_read_timeout_seconds,
+    write=10.0,
+    pool=5.0,
+)
 
 # Status codes worth trying once more: rate limiting and server-side faults.
 _RETRYABLE_STATUS = {408, 409, 425, 429, 500, 502, 503, 504}

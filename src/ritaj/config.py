@@ -74,6 +74,21 @@ class Settings:
     qdrant_path: str = os.getenv("QDRANT_PATH", "")
     qdrant_api_key: str = os.getenv("QDRANT_API_KEY", "")
     qdrant_timeout_seconds: float = float(os.getenv("QDRANT_TIMEOUT_SECONDS", "10"))
+
+    # Seconds allowed to OPEN a connection to the provider, TLS handshake
+    # included. Was a hard-coded 5.0, which is generous from a laptop and too
+    # tight from inside the Hugging Face container: every call failed with
+    # `ConnectTimeout: _ssl.c:999 The handshake operation timed out`, twice per
+    # request because the retry hit the same wall, and surfaced to students as
+    # LLM_TIMEOUT — "that took too long to answer", which pointed at the model
+    # and at question length, neither of which had anything to do with it.
+    #
+    # Separate from the read timeout on purpose: a slow handshake and a slow
+    # answer are different failures and want different budgets.
+    llm_connect_timeout_seconds: float = float(
+        os.getenv("LLM_CONNECT_TIMEOUT_SECONDS", "20")
+    )
+    llm_read_timeout_seconds: float = float(os.getenv("LLM_READ_TIMEOUT_SECONDS", "90"))
     collection: str = os.getenv("COLLECTION", "ritaj")
     # The name clients read. Indexing writes `ritaj_<corpus-version>` and points
     # this alias at it only after the new collection validates, so a rebuild

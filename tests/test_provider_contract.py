@@ -199,9 +199,28 @@ def test_stream_that_dies_before_any_token_is_retried(monkeypatch):
 
 
 def test_timeouts_are_split_between_connect_and_read():
-    """A hung connect should fail fast; a slow generation gets its full budget."""
-    assert llm._TIMEOUT.connect <= 10
+    """A hung connect must not consume the generation budget.
+
+    The ceiling was `connect <= 10`, a number chosen from intuition rather than
+    measurement — and the shipped value of 5.0 turned out to be too tight for
+    the real network path: from inside the Hugging Face container every call
+    failed with `ConnectTimeout: the handshake operation timed out`, twice per
+    request because the retry hit the same wall, and reached students as
+    "that took too long to answer" — blaming the model and the question length
+    for a TLS handshake.
+
+    So this pins the property that actually matters, which no environment can
+    invalidate: connect is bounded, and it is a small fraction of read, so a
+    dead endpoint fails long before a slow answer would.
+    """
+    assert llm._TIMEOUT.connect > 0
     assert llm._TIMEOUT.read >= 60
+    assert llm._TIMEOUT.connect < llm._TIMEOUT.read / 2, (
+        "connect must fail well before a slow generation would"
+    )
+    # A ceiling still, so "just raise it again" is not the reflex when a call
+    # hangs — at some point the endpoint is down and saying so is the answer.
+    assert llm._TIMEOUT.connect <= 30
 
 
 def test_configuration_check_rejects_a_hosted_endpoint_without_a_key(monkeypatch):
