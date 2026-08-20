@@ -136,3 +136,44 @@ def test_capabilities_answers_before_the_corpus_is_ready(reset_readiness):
     body = _capabilities()
     assert body["ready"] is False
     assert body["corpus"]["chunks"] in (None, 0)
+
+
+# --- admin display surfaces on a fresh deployment ---------------------------
+def test_admin_points_reports_no_corpus_instead_of_500(monkeypatch):
+    """A fresh deployment has no collection — and that is when an operator looks.
+
+    /admin/points returned 500 on the live Space because vectorstore.get_all()
+    raises when the collection was never created. A stack trace there reads as
+    "the console is broken" when the true answer is "nothing is indexed yet".
+    """
+    from starlette.testclient import TestClient
+
+    from ritaj import vectorstore
+    from ritaj.api import app
+
+    monkeypatch.setattr(vectorstore, "collection_ready", lambda: False)
+    with TestClient(app) as c:
+        r = c.get("/admin/points")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["points"] == []
+    assert body["corpus"] == "none-indexed"
+
+
+def test_collection_ready_is_not_a_retrieval_fallback():
+    """An absent collection must stay distinguishable from an empty one.
+
+    collection_ready() is for display surfaces only. Folding it into get_all()
+    or count() as a "return empty" fallback would make pointing at the wrong
+    Qdrant cluster look identical to a corpus that has not been built — the
+    exact failure the explicit QDRANT_MODE work exists to prevent.
+    """
+    import inspect
+
+    from ritaj import vectorstore
+
+    for name in ("get_all", "count", "query"):
+        source = inspect.getsource(getattr(vectorstore, name))
+        assert "collection_ready" not in source, (
+            f"vectorstore.{name} must not swallow a missing collection"
+        )

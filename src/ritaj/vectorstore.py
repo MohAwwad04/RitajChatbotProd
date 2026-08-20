@@ -144,6 +144,25 @@ def get_all() -> list[dict]:
     return out
 
 
+def collection_ready() -> bool:
+    """True when the collection queries read actually exists and is reachable.
+
+    Deliberately NOT folded into get_all()/count() as a "return empty" fallback.
+    Those are on the retrieval path, where an absent collection and an empty one
+    must stay distinguishable: pointing at the wrong cluster would otherwise look
+    exactly like a corpus that has not been built, which is the failure mode the
+    explicit QDRANT_MODE work exists to prevent.
+
+    This is for read-only display surfaces that should say "nothing indexed"
+    instead of returning 500 — which is what /admin/points did on a fresh
+    deployment, i.e. at exactly the moment an operator goes looking.
+    """
+    try:
+        return client().collection_exists(read_collection())
+    except Exception:  # noqa: BLE001 — unreachable store is "not ready" here
+        return False
+
+
 def count() -> int:
     return client().count(read_collection()).count
 

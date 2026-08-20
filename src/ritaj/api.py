@@ -26,7 +26,8 @@ from pydantic import BaseModel, Field, field_validator
 from . import (
     about, adminauth, answer_checks, bodylimit, bootstrap, budget, chatlog, citations, config,
     corpus, errors, evaluation, generate, grounding, guardrails, ingest, links, llm,
-    navigation, ratelimit, readiness, redact, runtime_config, source_policy, viz,
+    navigation, ratelimit, readiness, redact, runtime_config, source_policy,
+    vectorstore, viz,
 )
 from .config import settings
 from .generate import answer, answer_stream, repair
@@ -588,7 +589,16 @@ def viz_redirect():
 
 @app.get("/admin/points", dependencies=_ADMIN)
 def admin_points():
-    """The stored chunks projected to 3D via PCA."""
+    """The stored chunks projected to 3D via PCA.
+
+    Returns an empty projection rather than 500 when no collection exists. A
+    fresh deployment has no corpus by design, and that is precisely when an
+    operator opens this page — a stack trace there says "broken" when the true
+    answer is "nothing has been indexed yet".
+    """
+    if not vectorstore.collection_ready():
+        return {"points": [], "explained_variance": [0.0, 0.0, 0.0],
+                "corpus": "none-indexed"}
     return viz.points()
 
 
