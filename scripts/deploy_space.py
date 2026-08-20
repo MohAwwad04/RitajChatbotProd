@@ -66,8 +66,52 @@ Backend + student portal + operator console in one container.
 """
 
 # Everything the Dockerfile COPYs, plus the Dockerfile itself.
-STAGE_ITEMS = ["Dockerfile", "pyproject.toml", "src", "data", "scripts",
-               "ritaj-student-portal/dist"]
+STAGE_ITEMS = ["Dockerfile", "requirements.lock.txt", "pyproject.toml", "src",
+               "data", "scripts", "ritaj-student-portal/dist"]
+
+
+def _dockerfile_sources() -> list[str]:
+    """Every path the Dockerfile COPYs in, read from the Dockerfile itself.
+
+    STAGE_ITEMS is a hand-written restatement of what the image needs, and it
+    drifted: `requirements.lock.txt` was added to the Dockerfile and never to
+    this list, so every deploy uploaded a tree that could not build. The failure
+    surfaced twenty minutes later as BUILD_ERROR, "failed to calculate checksum
+    of ref ... /requirements.lock.txt: not found".
+
+    Deriving the requirement from the artifact instead of restating it means the
+    next COPY added to the Dockerfile fails here, before the upload, rather than
+    in the build queue.
+    """
+    sources: list[str] = []
+    for line in (ROOT / "Dockerfile").read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped.upper().startswith("COPY "):
+            continue
+        parts = stripped.split()[1:]
+        # Drop flags like --from=builder, then the final token (the destination).
+        parts = [t for t in parts if not t.startswith("--")]
+        sources.extend(parts[:-1])
+    return sources
+
+
+def _check_stage_covers_dockerfile() -> None:
+    """Fail before uploading if the image would be missing a file it COPYs."""
+    missing = []
+    for source in _dockerfile_sources():
+        covered = any(
+            source == item or source.startswith(item.rstrip("/") + "/")
+            for item in STAGE_ITEMS
+        )
+        if not covered:
+            missing.append(source)
+    if missing:
+        sys.exit(
+            "Dockerfile COPYs paths that deploy_space.py does not stage:\n  "
+            + "\n  ".join(missing)
+            + "\n\nAdd them to STAGE_ITEMS. The build would otherwise fail ~20 "
+              "minutes from now with 'failed to calculate checksum of ref'."
+        )
 
 # Never stage these, whatever ends up inside a staged directory: the quarantine
 # folder holds corpus material that deliberately failed source policy (Phase 2),
@@ -246,6 +290,7 @@ def main() -> None:
     args = ap.parse_args()
 
     space_id = SPACE_ID if args.space == "production" else STAGING_SPACE_ID
+    _check_stage_covers_dockerfile()
     _require_clean_tree(space_id, args.allow_dirty)
 
     token = os.environ.get("HF_TOKEN")
