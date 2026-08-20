@@ -9,6 +9,8 @@
 //   * read the Ritaj page, its DOM, cookies, storage or form values
 //   * send anything but the student's typed message and the prior turns
 
+import { REGISTRY_VERSION, resolveLocally, usableActions } from './actions.js'
+import { validateLinks } from './links.js'
 import { validateAction } from './navigation.js'
 
 /* global BASE_URL, MAX_MESSAGE_CHARS, chrome */
@@ -17,6 +19,7 @@ import { validateAction } from './navigation.js'
 const STRINGS = {
   en: {
     dir: 'ltr',
+    title: 'Ritaj Assistant',
     subtitle: 'Independent · Birzeit University',
     placeholder: 'Ask about Ritaj…',
     welcome:
@@ -29,6 +32,18 @@ const STRINGS = {
     tooLong: 'That message is too long. Please shorten it to {max} characters or fewer.',
     sources: 'Sources',
     stale: 'may be out of date',
+    finderTitle: 'Find a Ritaj page',
+    finderNote: 'Opens in a new tab',
+    finderEmpty:
+      'No Ritaj destinations have been approved yet. Each one has to be confirmed by a person before this assistant will open it.',
+    finderSignIn: 'sign-in needed',
+    chatOk: 'Chat ready',
+    chatDegraded: 'Chat unavailable',
+    chatOffline: 'Offline',
+    chatDegradedNote:
+      'Factual answers are unavailable right now. The page finder above still works.',
+    openFailed: 'Could not open that tab. Try again.',
+    requestId: 'Reference',
     stopped: 'Stopped.',
     cleared: 'History cleared.',
     confirmNav: 'Opens {host} in a tab. You may need to sign in.',
@@ -50,11 +65,14 @@ const STRINGS = {
       'How do I register for courses?',
       'When does the semester start?',
       'Where do I find my schedule on Ritaj?',
-      'Open course registration',
     ],
+    // Offered only when the finder actually has a destination — a chip that
+    // resolves to nothing teaches a student the assistant is broken.
+    navSuggestions: ['Open course registration'],
   },
   ar: {
     dir: 'rtl',
+    title: 'مساعد ريتاج',
     subtitle: 'مستقل · جامعة بيرزيت',
     placeholder: 'اسأل عن ريتاج…',
     welcome:
@@ -67,6 +85,18 @@ const STRINGS = {
     tooLong: 'الرسالة طويلة جداً. يرجى اختصارها إلى {max} حرف أو أقل.',
     sources: 'المصادر',
     stale: 'قد تكون غير محدّثة',
+    finderTitle: 'ابحث عن صفحة في ريتاج',
+    finderNote: 'تُفتح في تبويب جديد',
+    finderEmpty:
+      'لم تتم الموافقة على أي صفحة في ريتاج بعد. يجب أن يؤكّد شخص كل صفحة قبل أن يفتحها المساعد.',
+    finderSignIn: 'يتطلب تسجيل الدخول',
+    chatOk: 'الدردشة جاهزة',
+    chatDegraded: 'الدردشة غير متاحة',
+    chatOffline: 'غير متصل',
+    chatDegradedNote:
+      'الإجابات المبنية على المصادر غير متاحة حالياً. لا يزال البحث عن الصفحات أعلاه يعمل.',
+    openFailed: 'تعذّر فتح التبويب. حاول مرة أخرى.',
+    requestId: 'الرقم المرجعي',
     stopped: 'تم الإيقاف.',
     cleared: 'تم مسح المحادثات.',
     confirmNav: 'سيفتح {host} في تبويب جديد. قد تحتاج إلى تسجيل الدخول.',
@@ -87,8 +117,8 @@ const STRINGS = {
       'كيف أسجّل المساقات؟',
       'متى يبدأ الفصل الدراسي؟',
       'أين أجد جدولي في ريتاج؟',
-      'افتح تسجيل المساقات',
     ],
+    navSuggestions: ['افتح تسجيل المساقات'],
   },
 }
 
@@ -116,6 +146,12 @@ let busy = false
 let controller = null // AbortController for the in-flight request
 
 const $ = (id) => document.getElementById(id)
+// The destinations currently on screen. Seeded from the bundled registry so the
+// finder renders before any network call, then replaced by the server's copy if
+// one arrives — see refreshCapabilities().
+let knownActions = usableActions(null)
+let registryVersion = REGISTRY_VERSION
+
 const thread = () => $('thread')
 const S = () => STRINGS[lang]
 
@@ -154,6 +190,16 @@ function saveState() {
 }
 
 // --- Status banner ------------------------------------------------------------
+function showRequestId(id) {
+  if (!id) return
+  const banner = $('status')
+  if (banner.hidden) return
+  const el = document.createElement('div')
+  el.className = 'request-id'
+  el.textContent = `${S().requestId}: ${id}`
+  banner.appendChild(el)
+}
+
 function showStatus(message) {
   const box = $('status')
   if (!message) {
@@ -179,10 +225,22 @@ function applyLang() {
   document.documentElement.dir = s.dir
   document.documentElement.lang = lang
   document.body.dir = s.dir
+  $('title').textContent = s.title
   $('subtitle').textContent = s.subtitle
   $('input').placeholder = s.placeholder
   $('disclaimer-text').textContent = s.disclaimer
   $('lang-toggle').textContent = lang === 'ar' ? 'EN' : 'ع'
+  renderFinder()
+  // The pill keeps its state and changes language with everything else.
+  if (!$('service-pill').hidden) {
+    const el = $('service-pill')
+    const state = el.classList.contains('pill--ok')
+      ? 'ok'
+      : el.classList.contains('pill--offline')
+        ? 'offline'
+        : 'degraded'
+    setServicePill(state)
+  }
   renderThread()
 }
 
@@ -238,10 +296,20 @@ function renderSources(container, sources) {
 }
 
 function renderLinks(container, links) {
-  if (!links?.length) return
+  // Every citation is re-validated here against links.js, which knows the
+  // official Birzeit hosts and nothing else. This used to assign `a.href`
+  // straight from the response body: a compromised or impersonated backend
+  // could put `javascript:` or a lookalike domain in front of a student who had
+  // every reason to trust it, because the panel had just cited it as a source.
+  //
+  // The policy is deliberately NOT navigation.js's. That one answers "may we
+  // steer the browser here", and its answer is five reviewed paths on one host;
+  // a citation is a different object with a different threat.
+  const safe = validateLinks(links)
+  if (!safe.length) return
   const box = document.createElement('div')
   box.className = 'links'
-  for (const { label, url } of links) {
+  for (const { label, url } of safe) {
     const a = document.createElement('a')
     a.href = url
     a.textContent = label
@@ -286,6 +354,159 @@ function renderNavigation(container, rawAction) {
   container.appendChild(box)
 }
 
+/* --- Page finder ------------------------------------------------------------
+ *
+ * The section that has to keep working when nothing else does. It renders from
+ * `knownActions`, which starts as the bundled registry generated from
+ * data/navigation.yaml and is replaced by /v2/navigation/actions when the
+ * backend answers. Every URL passes navigation.destinationProblem() first, and
+ * the service worker validates it a third time before it opens a tab.
+ */
+function renderFinder() {
+  const s = S()
+  const section = $('finder')
+  const grid = $('finder-grid')
+  $('finder-title').textContent = s.finderTitle
+  grid.innerHTML = ''
+
+  if (!knownActions.length) {
+    // Honest empty state rather than a hidden section. "Nobody has approved a
+    // destination yet" and "this feature does not exist" are different facts,
+    // and hiding the section would tell the student the second one.
+    $('finder-note').textContent = ''
+    const note = document.createElement('p')
+    note.className = 'finder__empty'
+    note.textContent = s.finderEmpty
+    grid.appendChild(note)
+    section.hidden = false
+    return
+  }
+
+  $('finder-note').textContent = s.finderNote
+  // Destinations arriving from the network can unlock the navigation
+  // suggestion chips, which are rendered from the same knownActions list. Only
+  // while the welcome screen is showing — never mid-conversation.
+  if (!turns.length) renderSuggestions()
+  for (const action of knownActions) {
+    const label = lang === 'ar' ? action.label_ar : action.label_en
+    if (!label) continue
+
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'finder__item'
+
+    const name = document.createElement('span')
+    name.textContent = label
+    button.appendChild(name)
+
+    if (action.auth_required) {
+      const lock = document.createElement('span')
+      lock.className = 'finder__lock'
+      lock.textContent = `· ${s.finderSignIn}`
+      button.appendChild(lock)
+    }
+
+    // The host is shown before the click, not after. A student should be able
+    // to see where a button goes without trusting the label above it.
+    const host = document.createElement('span')
+    host.className = 'finder__host'
+    try {
+      host.textContent = new URL(action.url).hostname
+    } catch {
+      host.textContent = ''
+    }
+    button.appendChild(host)
+
+    button.addEventListener('click', () => openDestination(action.url))
+    grid.appendChild(button)
+  }
+  section.hidden = false
+}
+
+/** Ask the service worker to open a validated destination. */
+function openDestination(url) {
+  chrome.runtime.sendMessage({ type: 'ritaj:navigate', url }, (response) => {
+    // Reading lastError is what suppresses Chrome's "Unchecked runtime.lastError"
+    // noise, and it is also the only way a failed open becomes visible here.
+    if (chrome.runtime.lastError || !response?.ok) {
+      showStatus(S().openFailed)
+    }
+  })
+}
+
+/* --- Service status ---------------------------------------------------------
+ *
+ * Reports whether CHAT can answer. The finder is deliberately excluded: it
+ * works offline, so folding it into one "service status" would either
+ * understate the outage or overstate the capability.
+ */
+function setServicePill(state) {
+  const pill = $('service-pill')
+  const text = $('service-pill-text')
+  const s = S()
+  pill.classList.remove('pill--ok', 'pill--degraded', 'pill--offline')
+  if (state === 'ok') {
+    pill.classList.add('pill--ok')
+    text.textContent = s.chatOk
+  } else if (state === 'offline') {
+    pill.classList.add('pill--offline')
+    text.textContent = s.chatOffline
+  } else {
+    pill.classList.add('pill--degraded')
+    text.textContent = s.chatDegraded
+  }
+  pill.hidden = false
+}
+
+/**
+ * Refresh destinations and chat readiness from the backend, best-effort.
+ *
+ * Every failure path here is non-fatal on purpose. The panel has already
+ * rendered from the bundled registry by the time this runs, so an unreachable
+ * backend leaves a working page finder and a truthful "chat unavailable" pill
+ * rather than an empty panel and a spinner.
+ */
+async function refreshCapabilities() {
+  if (!navigator.onLine) {
+    setServicePill('offline')
+    return
+  }
+  try {
+    const [actionsRes, capsRes] = await Promise.allSettled([
+      fetch(`${BASE_URL}/v2/navigation/actions`, { signal: AbortSignal.timeout(8000) }),
+      fetch(`${BASE_URL}/capabilities`, { signal: AbortSignal.timeout(8000) }),
+    ])
+
+    if (actionsRes.status === 'fulfilled' && actionsRes.value.ok) {
+      const fetched = await actionsRes.value.json()
+      const next = usableActions(fetched)
+      // Only re-render when the answer actually differs from what is on screen,
+      // so a refresh does not steal focus from a button mid-click.
+      if (fetched.version !== registryVersion || next.length !== knownActions.length) {
+        knownActions = next
+        registryVersion = fetched.version ?? registryVersion
+        renderFinder()
+      }
+    }
+
+    if (capsRes.status === 'fulfilled' && capsRes.value.ok) {
+      const caps = await capsRes.value.json()
+      // `modes` is the newer, per-feature block; `ready` is the older single
+      // flag. Prefer the first, fall back to the second, so this panel works
+      // against a backend that has not been redeployed yet.
+      const ready = caps.modes ? caps.modes.ready : caps.ready
+      setServicePill(ready ? 'ok' : 'degraded')
+      if (!ready) showStatus(S().chatDegradedNote)
+    } else {
+      setServicePill('degraded')
+    }
+  } catch {
+    // Network refused, DNS failed, the Space is asleep — all the same to the
+    // student, and none of them should empty the panel.
+    setServicePill('degraded')
+  }
+}
+
 function addBubble(role, content, turn) {
   const div = document.createElement('div')
   div.className = `msg msg--${role}`
@@ -320,7 +541,14 @@ function renderThread() {
 function renderSuggestions() {
   const box = $('suggestions')
   box.innerHTML = ''
-  for (const text of S().suggestions) {
+  const s = S()
+  // A navigation prompt is only a real suggestion if a reviewed destination
+  // exists to answer it. With none approved, "Open course registration"
+  // resolves to nothing and reads as a broken product rather than an honest one.
+  const prompts = knownActions.length
+    ? [...s.suggestions, ...(s.navSuggestions ?? [])]
+    : s.suggestions
+  for (const text of prompts) {
     const b = document.createElement('button')
     b.type = 'button'
     b.textContent = text
@@ -359,6 +587,10 @@ async function streamChat(message, history, callbacks, signal) {
     const err = new Error(code || `HTTP ${response.status}`)
     err.code = code
     err.retryAfter = Number(response.headers.get('Retry-After')) || null
+    // The join key between what a student can quote and the protected log line
+    // that holds the provider's actual error. Surfacing it means a bug can be
+    // reported without anyone asking the student to repeat their question.
+    err.requestId = response.headers.get('X-Request-ID')
     throw err
   }
   if (!response.body) throw new Error('EMPTY_RESPONSE')
@@ -370,14 +602,23 @@ async function streamChat(message, history, callbacks, signal) {
     const { value, done } = await reader.read()
     if (done) break
     buffer += decoder.decode(value, { stream: true })
-    const frames = buffer.split('\n\n')
+    // An SSE frame ends with a blank line, which the spec allows to be CRLF,
+    // LF or CR. Splitting on '\n\n' alone means a proxy that normalises to
+    // CRLF produces one frame that never terminates, and the panel streams
+    // nothing at all while appearing to work.
+    const frames = buffer.split(/\r\n\r\n|\n\n|\r\r/)
     buffer = frames.pop() ?? ''
     for (const frame of frames) {
-      const line = frame.split('\n').find((l) => l.startsWith('data:'))
-      if (!line) continue
+      // `data:` may legally be repeated; the value is the lines joined by LF.
+      const data = frame
+        .split(/\r\n|\n|\r/)
+        .filter((l) => l.startsWith('data:'))
+        .map((l) => l.slice(5).trim())
+        .join('\n')
+      if (!data) continue
       let event
       try {
-        event = JSON.parse(line.slice(5).trim())
+        event = JSON.parse(data)
       } catch {
         continue
       }
@@ -497,6 +738,7 @@ async function send(preset) {
     } else {
       const text = messageForCode(err?.code, null)
       showStatus(text)
+      showRequestId(err?.requestId)
       show(raw || text)
     }
   } finally {
@@ -518,6 +760,16 @@ async function send(preset) {
 document.addEventListener('DOMContentLoaded', async () => {
   await loadState()
   applyLang()
+
+  // The finder is drawn from the bundled registry before any network call, so
+  // the panel is useful the instant it opens — including with the backend down.
+  renderFinder()
+  refreshCapabilities()
+
+  // Coming back online is the moment a "chat unavailable" pill is most likely
+  // to be stale, and the moment a student retries.
+  window.addEventListener('online', () => refreshCapabilities())
+  window.addEventListener('offline', () => setServicePill('offline'))
 
   const input = $('input')
   input.addEventListener('input', () => {

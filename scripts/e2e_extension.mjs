@@ -143,7 +143,19 @@ async function main() {
 
     const panel = await context.newPage()
     const consoleErrors = []
-    panel.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()) })
+    // The backend host is blackholed by --host-resolver-rules above, on purpose,
+    // so the panel's start-up capability probe cannot resolve it. Chrome logs
+    // that at console level from the network stack, not from our code, and no
+    // amount of try/catch in the panel suppresses it — the fetch rejection IS
+    // handled (that is what leaves a working page finder and a "chat
+    // unavailable" pill). Ignoring exactly this string keeps the assertion
+    // meaningful for every OTHER console error, which is what it is for.
+    const HARNESS_BLACKHOLE = /net::ERR_NAME_NOT_RESOLVED/
+    panel.on('console', (m) => {
+      if (m.type() === 'error' && !HARNESS_BLACKHOLE.test(m.text())) {
+        consoleErrors.push(m.text())
+      }
+    })
     panel.on('pageerror', (e) => consoleErrors.push(String(e)))
     await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`)
     await panel.waitForLoadState('domcontentloaded')
@@ -256,6 +268,82 @@ async function main() {
       assert.equal(action?.requiresConfirmation, true)
     })
 
+    await check('the page finder renders without any backend', async () => {
+      // The backend host is blackholed by --host-resolver-rules, so this is the
+      // outage case: the section must still be on screen and must say something
+      // true. Today the bundled registry is empty (no destination has been
+      // approved), so the honest render is the explanatory empty state — not a
+      // hidden section, which would read as "this feature does not exist".
+      const visible = await panel.evaluate(() => !document.getElementById('finder').hidden)
+      assert.equal(visible, true, 'the page finder was hidden with the backend down')
+
+      const title = (await panel.textContent('#finder-title')) ?? ''
+      assert.ok(title.trim().length > 0, 'the finder has no heading')
+
+      const buttons = await panel.$$('#finder-grid .finder__item')
+      const empty = await panel.$('#finder-grid .finder__empty')
+      assert.ok(
+        buttons.length > 0 || empty !== null,
+        'the finder rendered neither destinations nor an empty-state explanation',
+      )
+      // Whatever it renders must match the bundled registry exactly.
+      const bundled = await panel.evaluate(async () => {
+        const { BUNDLED_ACTIONS } = await import('./actions.generated.js')
+        return BUNDLED_ACTIONS.length
+      })
+      assert.equal(buttons.length, bundled,
+        `finder shows ${buttons.length} buttons for ${bundled} bundled action(s)`)
+    })
+
+    await check('the chat status pill reports unavailable, not ready', async () => {
+      // With the backend unreachable the panel must not claim chat works. The
+      // finder above stays usable — that separation is the whole point.
+      const pill = await panel.evaluate(() => {
+        const el = document.getElementById('service-pill')
+        return { hidden: el.hidden, cls: el.className, text: el.textContent.trim() }
+      })
+      assert.equal(pill.hidden, false, 'the status pill never appeared')
+      assert.ok(!pill.cls.includes('pill--ok'),
+        `pill claims chat is ready while the backend is unreachable: ${pill.cls}`)
+      assert.ok(pill.text.length > 0, 'the pill has no label')
+    })
+
+    await check('the offline resolver only ever returns a registered destination', async () => {
+      const results = await panel.evaluate(async () => {
+        const { resolveLocally } = await import('./actions.js')
+        const actions = [{
+          id: 'academic-calendar',
+          label_ar: 'x', label_en: 'Open the academic calendar',
+          url: 'https://ritaj.birzeit.edu/academic-calendar',
+          auth_required: false, requires_confirmation: true,
+          intents_en: ['open the academic calendar'], intents_ar: [],
+          min_confidence: 0.75,
+        }]
+        return [
+          resolveLocally('open the academic calendar', actions)?.url ?? null,
+          resolveLocally('open https://attacker.test/', actions)?.url ?? null,
+          resolveLocally('what is my GPA', actions)?.url ?? null,
+        ]
+      })
+      assert.equal(results[0], 'https://ritaj.birzeit.edu/academic-calendar')
+      assert.ok(results[1] === null || results[1].startsWith('https://ritaj.birzeit.edu/'),
+        `offline resolver produced a foreign URL: ${results[1]}`)
+      assert.equal(results[2], null, 'an unrelated question produced a destination')
+    })
+
+    await check('a hostile source link is never rendered as an anchor', async () => {
+      const hrefs = await panel.evaluate(async () => {
+        const { validateLinks } = await import('./links.js')
+        return validateLinks([
+          { label: 'Real', url: 'https://www.birzeit.edu/en/admissions' },
+          { label: 'Script', url: 'javascript:alert(1)' },
+          { label: 'Phish', url: 'https://birzeit.edu.attacker.test/' },
+          { label: 'Data', url: 'data:text/html,<script>alert(1)</script>' },
+        ]).map((l) => l.url)
+      })
+      assert.deepEqual(hrefs, ['https://www.birzeit.edu/en/admissions'])
+    })
+
     await check('clear history empties local storage', async () => {
       await panel.evaluate(async () => {
         await chrome.storage.local.set({ session: { sessionId: 'x', turns: [
@@ -301,13 +389,26 @@ async function main() {
       // which is precisely what this records.
       await worker.evaluate(() => {
         globalThis.__opened = []
+        globalThis.__queried = false
+        // Chrome's tabs API honours BOTH shapes: it invokes a trailing callback
+        // and returns a promise. An earlier version of this stub returned only
+        // a promise, so when the worker moved to the callback form (which is how
+        // chrome.runtime.lastError is reported) sendResponse was never called
+        // and the whole run hung with no output. Model both, the way the real
+        // API behaves, so the stub cannot dictate the worker's calling style.
         const record = (kind) => (...args) => {
+          const cb = typeof args[args.length - 1] === 'function' ? args.pop() : null
           globalThis.__opened.push({ kind, args })
-          return Promise.resolve({ id: 1, windowId: 1 })
+          const tab = { id: 1, windowId: 1 }
+          if (cb) cb(tab)
+          return Promise.resolve(tab)
         }
         chrome.tabs.create = record('create')
         chrome.tabs.update = record('update')
-        chrome.tabs.query = (_q, cb) => cb([])   // pretend no Ritaj tab is open
+        // Not a stub that helps the worker along — a tripwire. Querying tab URLs
+        // needs the "tabs" permission this extension deliberately does not
+        // request, so any call here is a regression, not a fallback.
+        chrome.tabs.query = (..._args) => { globalThis.__queried = true; throw new Error('tabs.query is not permitted') }
       })
 
       const response = await navigate('https://ritaj.birzeit.edu/reg/')
@@ -317,6 +418,10 @@ async function main() {
       assert.equal(opened.length, 1, `expected one tab call, got ${opened.length}`)
       assert.equal(opened[0].kind, 'create')
       assert.equal(opened[0].args[0].url, 'https://ritaj.birzeit.edu/reg/')
+      // Always a new tab, never a reuse: the reuse path needed tabs.query({url}),
+      // which needs a permission whose absence the store listing promises.
+      const queried = await worker.evaluate(() => globalThis.__queried)
+      assert.equal(queried, false, 'the worker called chrome.tabs.query')
     })
 
     await check('a refused destination reaches no tabs API at all', async () => {

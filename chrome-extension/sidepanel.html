@@ -20,6 +20,11 @@
         </div>
       </div>
       <div class="actions">
+        <!-- Whether chat can answer at all. The page finder below keeps working
+             regardless, so this reports the chat service, not "the extension". -->
+        <span id="service-pill" class="pill" role="status" aria-live="polite" hidden>
+          <span class="pill__dot" aria-hidden="true"></span><span id="service-pill-text"></span>
+        </span>
         <button id="lang-toggle" type="button" title="العربية / English" aria-label="Switch language">ع</button>
         <button id="new-chat" type="button" title="New chat" aria-label="Start a new chat">↺</button>
         <button id="clear-history" type="button" title="Clear stored history" aria-label="Clear stored history">🗑</button>
@@ -29,6 +34,19 @@
     <!-- Initialization / offline / quota states live here, announced once and
          never interleaved with the transcript. -->
     <div id="status" class="status" role="status" aria-live="polite" hidden></div>
+
+    <!-- The page finder. Deliberately ABOVE the transcript and outside it: it
+         is the feature that works with no corpus, no model and no network, so
+         it must not scroll away with the conversation or vanish on the
+         "no answer" path. Populated from the bundled registry, refreshed from
+         /v2/navigation/actions when the backend is reachable. -->
+    <section id="finder" aria-labelledby="finder-title" hidden>
+      <div class="finder__head">
+        <h2 id="finder-title" class="finder__title"></h2>
+        <span id="finder-note" class="finder__note"></span>
+      </div>
+      <div id="finder-grid" class="finder__grid"></div>
+    </section>
 
     <main id="thread" tabindex="0" aria-label="Conversation"></main>
 
