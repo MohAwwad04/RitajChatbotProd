@@ -14,6 +14,11 @@ Usage:
     python scripts/sbom.py                  # write release/sbom.json
     python scripts/sbom.py --print          # to stdout
     python scripts/sbom.py --check-pinned   # fail if a deployable isn't pinned
+    python scripts/sbom.py --check-current  # fail if the committed file is stale
+
+Note that plain `python scripts/sbom.py` rewrites a tracked file and therefore
+dirties the tree, which `package_extension.py --verify` and a production
+`deploy_space.py` both refuse. Generate and commit it *before* packaging.
 """
 
 from __future__ import annotations
@@ -204,11 +209,75 @@ def check_pinned(sbom: dict) -> int:
     return problems
 
 
+def _comparable(sbom: dict) -> dict:
+    """The SBOM minus the one field that legitimately changes every run."""
+    trimmed = json.loads(json.dumps(sbom))
+    trimmed.get("metadata", {}).pop("timestamp", None)
+    return trimmed
+
+
+def check_current() -> int:
+    """The committed SBOM must describe the tree that is about to ship.
+
+    Found 2026-08-10: `release/sbom.json` was generated at 14:27:45Z on
+    2026-08-05 and `requirements.lock.txt` was updated ~20 minutes later by a
+    security bump, so the committed bill of materials named pypdf 6.13.3 and
+    setuptools 81.0.0 while the image installed 6.14.2 and 83.0.0. No gate could
+    catch it: CI regenerates the file and uploads it as an artifact, and never
+    compares it against the copy in the tree. A bill of materials that describes
+    a different build than the one shipping is worse than having none — it is
+    the document an auditor trusts instead of looking.
+
+    Timestamp is excluded from the comparison; everything else must match.
+    """
+    committed_path = ROOT / "release" / "sbom.json"
+    if not committed_path.exists():
+        print("  ERROR release/sbom.json is missing — run python scripts/sbom.py")
+        return 1
+    try:
+        committed = json.loads(committed_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        print(f"  ERROR release/sbom.json is not valid JSON: {exc}")
+        return 1
+
+    current = build()
+    if _comparable(committed) == _comparable(current):
+        print(f"  release/sbom.json matches the tree "
+              f"({len(current['components'])} components)")
+        return 0
+
+    print("  ERROR release/sbom.json is stale — regenerate it with "
+          "`python scripts/sbom.py` and commit the result")
+    # Name what drifted, so the failure is actionable without a diff tool.
+    committed_versions = {(c["type"], c["name"]): c.get("version")
+                          for c in committed.get("components", [])}
+    current_versions = {(c["type"], c["name"]): c.get("version")
+                        for c in current["components"]}
+    for key in sorted(set(committed_versions) | set(current_versions)):
+        was, now = committed_versions.get(key), current_versions.get(key)
+        if was == now:
+            continue
+        kind, name = key
+        if was is None:
+            print(f"    + {kind} {name} {now} is in the tree but not the SBOM")
+        elif now is None:
+            print(f"    - {kind} {name} {was} is in the SBOM but not the tree")
+        else:
+            print(f"    ~ {kind} {name}: SBOM says {was}, tree has {now}")
+    return 1
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--print", action="store_true", dest="to_stdout")
     ap.add_argument("--check-pinned", action="store_true")
+    ap.add_argument("--check-current", action="store_true",
+                    help="fail if release/sbom.json no longer matches the tree")
     args = ap.parse_args()
+
+    if args.check_current:
+        print("Committed SBOM vs. the tree\n")
+        sys.exit(check_current())
 
     sbom = build()
     counts: dict[str, int] = {}

@@ -393,6 +393,70 @@ def health():
                         status_code=503)
 
 
+@app.get("/capabilities")
+def capabilities():
+    """What this deployment can actually do, derived from the registries.
+
+    The student portal's home view renders this. It exists because the portal
+    previously described capabilities it did not have — a dashboard of invented
+    courses, grades and a balance, over a backend whose scope guardrail declines
+    every personal-record question by design (`guardrails._RESPONSE_PERSONAL`).
+    A hard-coded list would drift back the same way, so nothing here is written
+    twice: topics come from `data/sources.yaml`, destinations from
+    `data/navigation.yaml`, and counts from the built corpus manifest.
+
+    Public and unauthenticated, so it carries the same discipline as /ready:
+
+      * only `approved: true` records are named. A review-queue entry is a
+        question ("is this the right page?"), not a capability, and listing one
+        would tell a student the assistant knows something it does not;
+      * only `enabled: true` navigation actions are named, so flipping the kill
+        switch withdraws a destination from the UI in the same redeploy that
+        withdraws it from the answer path;
+      * no filesystem path, no snapshot content, no owner email, no counts that
+        reveal anything but size.
+    """
+    report = source_policy.load_and_validate(check_content=False)
+    approved = [s for s in report.sources if s.approved]
+    actions = [a for a in navigation.load_registry().values() if a.enabled]
+    return {
+        "corpus": corpus.summary(),
+        "ready": readiness.is_ready(),
+        "topics": [
+            {
+                "id": s.id,
+                "title": s.title,
+                "language": s.language,
+                "url": s.canonical_url,
+                "refresh": s.refresh,
+                "stale": s.is_stale(),
+            }
+            for s in approved
+        ],
+        # Size of the review queue, without naming its members.
+        "pending_topics": len(report.sources) - len(approved),
+        "navigation": [
+            {
+                "id": a.id,
+                "label_ar": a.label_ar,
+                "label_en": a.label_en,
+                "url": a.destination,
+                "auth_required": a.auth_required,
+            }
+            for a in actions
+        ],
+        "pending_navigation": navigation.declared_count() - len(actions),
+        # Stated positively so the portal renders the limits from the same
+        # source of truth the guardrail enforces, rather than from UI copy.
+        "limits": {
+            "personal_records": False,   # grades, GPA, schedule, balance
+            "sign_in_on_your_behalf": False,
+            "public_ritaj_pages": True,
+            "navigation_needs_confirmation": True,
+        },
+    }
+
+
 # --- Admin dashboard --------------------------------------------------------
 @app.get("/admin", include_in_schema=False)
 def admin_page():

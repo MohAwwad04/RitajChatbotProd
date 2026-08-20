@@ -1,12 +1,14 @@
-import { ChevronLeft, LogOut } from 'lucide-react'
-import { footerLinks, mainNavigation, serviceNavigation } from '../../data/dashboard'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { aboutViews, views } from '../../data/dashboard'
+import { useI18n } from '../../i18n'
+import type { NavigationItem, ViewId } from '../../types'
 import { Brand } from '../ui/Brand'
 
 type Props = {
   collapsed: boolean
   mobileOpen: boolean
-  active: string
-  onNavigate: (label: string) => void
+  active: ViewId
+  onNavigate: (view: ViewId) => void
   onClose: () => void
 }
 
@@ -18,28 +20,29 @@ function NavGroup({
   onNavigate,
 }: {
   label?: string
-  items: typeof mainNavigation
-  active: string
+  items: NavigationItem[]
+  active: ViewId
   collapsed: boolean
-  onNavigate: (label: string) => void
+  onNavigate: (view: ViewId) => void
 }) {
+  const { s, lang } = useI18n()
+  const Chevron = lang === 'ar' ? ChevronLeft : ChevronRight
   return (
     <div className="nav-group">
       {label && !collapsed && <span className="nav-group__label">{label}</span>}
-      <nav aria-label={label ?? 'التنقل الرئيسي'}>
+      <nav aria-label={label ?? s.aria_sidebar}>
         {items.map((item) => {
           const Icon = item.icon
           return (
             <button
-              className={`nav-item ${active === item.label ? 'is-active' : ''}`}
-              key={item.label}
-              onClick={() => onNavigate(item.label)}
+              className={`nav-item ${active === item.id ? 'is-active' : ''}`}
+              key={item.id}
+              onClick={() => onNavigate(item.id)}
               title={collapsed ? item.label : undefined}
             >
               <Icon size={20} strokeWidth={1.8} />
               {!collapsed && <span>{item.label}</span>}
-              {!collapsed && item.badge && <b>{item.badge}</b>}
-              {!collapsed && active !== item.label && <ChevronLeft className="nav-item__arrow" size={15} />}
+              {!collapsed && active !== item.id && <Chevron className="nav-item__arrow" size={15} />}
             </button>
           )
         })}
@@ -48,33 +51,38 @@ function NavGroup({
   )
 }
 
+// The rail no longer offers Grades, Financial record, Messages, Profile or a
+// Log out button: this product has no account to sign out of, and offering
+// those destinations implied a portal behind them. Every entry below routes to
+// a view that exists.
 export function Sidebar({ collapsed, mobileOpen, active, onNavigate, onClose }: Props) {
-  const navigate = (label: string) => {
-    onNavigate(label)
+  const { s } = useI18n()
+  const navigate = (view: ViewId) => {
+    onNavigate(view)
     onClose()
   }
 
   return (
     <>
-      <button className={`sidebar-backdrop ${mobileOpen ? 'is-visible' : ''}`} onClick={onClose} aria-label="إغلاق القائمة" />
+      <button
+        className={`sidebar-backdrop ${mobileOpen ? 'is-visible' : ''}`}
+        onClick={onClose}
+        aria-label={s.aria_close_panel}
+      />
       <aside className={`sidebar ${collapsed ? 'is-collapsed' : ''} ${mobileOpen ? 'is-open' : ''}`}>
         <div className="sidebar__top"><Brand compact={collapsed} /></div>
         <div className="sidebar__body">
-          <NavGroup items={mainNavigation} active={active} collapsed={collapsed} onNavigate={navigate} />
-          <NavGroup label="الخدمات" items={serviceNavigation} active={active} collapsed={collapsed} onNavigate={navigate} />
+          <NavGroup items={views(s)} active={active} collapsed={collapsed} onNavigate={navigate} />
+          <NavGroup
+            label={s.nav_group_about}
+            items={aboutViews(s)}
+            active={active}
+            collapsed={collapsed}
+            onNavigate={navigate}
+          />
         </div>
         <div className="sidebar__footer">
-          {footerLinks.map((item) => {
-            const Icon = item.icon
-            return (
-              <button key={item.label} title={collapsed ? item.label : undefined} onClick={() => navigate(item.label)}>
-                <Icon size={19} />{!collapsed && <span>{item.label}</span>}
-              </button>
-            )
-          })}
-          <button className="logout" title={collapsed ? 'تسجيل الخروج' : undefined}>
-            <LogOut size={19} />{!collapsed && <span>تسجيل الخروج</span>}
-          </button>
+          {!collapsed && <p className="sidebar__note">{s.unofficial}</p>}
         </div>
       </aside>
     </>

@@ -208,6 +208,29 @@ def problems(action: Action) -> list[str]:
 
 def reload_registry() -> None:
     load_registry.cache_clear()
+    declared_count.cache_clear()
+
+
+@lru_cache(maxsize=1)
+def declared_count(path: str | None = None) -> int:
+    """How many actions the file declares, including unusable ones.
+
+    `load_registry()` deliberately drops an entry that names no approver, so its
+    length answers "how many destinations work", not "how many exist". /capabilities
+    needs the difference to say *five destinations are awaiting approval* rather
+    than silently showing an empty list, which reads as "this feature does not
+    exist" instead of "nobody has approved it yet".
+    """
+    target = Path(path) if path else REGISTRY_PATH
+    if not target.exists():
+        return 0
+    import yaml  # noqa: PLC0415
+
+    try:
+        data = yaml.safe_load(target.read_text(encoding="utf-8")) or []
+    except Exception:  # noqa: BLE001 — same reasoning as load_registry
+        return 0
+    return sum(1 for record in data if isinstance(record, dict)) if isinstance(data, list) else 0
 
 
 def get(action_id: str) -> Action | None:

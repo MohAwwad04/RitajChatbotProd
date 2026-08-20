@@ -33,8 +33,16 @@ that a production record's canonical source must be exactly
 `https://ritaj.birzeit.edu`, with an owner, a snapshot, a hash and a named
 approver.
 
-Full picture: [`READY_TO_RELEASE_EXECUTION_PLAN.md`](READY_TO_RELEASE_EXECUTION_PLAN.md)
-and [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md).
+Because there is no corpus, **the portal's home view reports zero approved
+topics and zero navigation destinations, and the assistant abstains from every
+question.** That is the product working as designed, not a broken build — the
+home view is rendered from `GET /capabilities`, so it can only ever show what
+has actually been approved.
+
+Full picture: [`cowork_ritaj/COWORK_PLAN.md`](cowork_ritaj/COWORK_PLAN.md) (the
+current work order),
+[`READY_TO_RELEASE_EXECUTION_PLAN.md`](READY_TO_RELEASE_EXECUTION_PLAN.md) and
+[`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md).
 
 ---
 
@@ -61,7 +69,8 @@ and [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md).
   then a `BAAI/bge-reranker-v2-m3` cross-encoder, then metadata policy and a
   calibrated abstention floor. Model revisions are pinned.
 - **Vector store:** Qdrant — embedded on disk in the container, a server in dev.
-- **API:** FastAPI. `/live`, `/ready`, `/chat`, `/v2/chat[/stream]`, `/admin/*`.
+- **API:** FastAPI. `/live`, `/ready`, `/capabilities`, `/chat`,
+  `/v2/chat[/stream]`, `/admin/*`.
 
 **Conversation memory** is client-owned: each client replays its prior turns
 (`history`) plus a `session_id`; the server clamps them, condenses follow-ups

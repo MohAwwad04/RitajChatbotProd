@@ -87,17 +87,24 @@ Birzeit unit. Bypassing access controls is not an ingestion strategy.
   deployment runbook exist.
 - CI contains backend, policy, security, frontend, extension, and container jobs.
 
-### 2.2 Verified checks on 5 August 2026
+### 2.2 Verified checks on 15 August 2026
+
+Re-measured, replacing the 5 August table. Six of its rows had changed; two of
+them had changed from red to green and were still being quoted as blockers.
 
 | Check | Result | Release meaning |
 |---|---:|---|
-| Backend test suite | 312 passed | Strong local implementation baseline |
+| Backend test suite | 361 passed | Was 312 on 5 Aug, 355 on 10 Aug; +6 for the /capabilities surface |
 | Extension navigation tests | 9 passed | URL validator rejects the covered attacks |
 | Portal TypeScript + production build | Passed | Portal compiles and bundles |
+| Portal lint | **Passed** | Fixed since 5 Aug — the ESLint 9 flat config exists |
 | Source, navigation, extension, privacy, secret, and model-free checks | Passed | Policy code is present and internally consistent |
-| Release-set completeness | Failed | Correct blocker: no answerable/calendar/navigation evaluation corpus |
-| Portal lint | Failed | ESLint 9 has no flat configuration |
-| Reproducibility check | Warning | Docker base image is tag-pinned, not digest-pinned |
+| Privacy check — portal capability claims | Passed | New: the portal may no longer claim access the guardrail refuses |
+| Committed SBOM vs. the tree | Passed | New gate. Was **stale** on 10 Aug (pypdf 6.13.3 vs. 6.14.2 shipping) |
+| Operational ownership register | **Failed** | New gate, correctly red: nine duties and four drills unassigned |
+| Release-set completeness | Failed | Correct blocker: `answerable 0/100`, `calendar 0/25` |
+| Model-free release checks | Passed | 22 navigation cases, 100% destination precision |
+| Reproducibility check | **Passed** | Fixed since 5 Aug — the base image is digest-pinned |
 | Live Hugging Face service | HTTP 503 | Production is down and runs an older commit |
 
 ### 2.3 Current hard blockers
@@ -106,8 +113,9 @@ Birzeit unit. Bypassing access controls is not an ingestion strategy.
 2. All seven source candidates are unapproved.
 3. The answerable, calendar, and navigation evaluation sets are empty.
 4. All five navigation actions are disabled and have no approver.
-5. The new branch is local, has no upstream, and has not been reviewed or
-   merged into `release`.
+5. The `roadmap/2026-release` branch is pushed with PR #2 open against
+   `release`, but `release` itself is **unprotected** (branch-protection returns
+   404), and the PR is not merged.
 6. There is no release tag or `release/manifest.json`.
 7. The live Hugging Face Space is in `RUNTIME_ERROR` and contains the old data.
 8. Cloudflare, Hugging Face, and Chrome Web Store production access have not

@@ -133,6 +133,61 @@ def check_portal_collects_no_name() -> int:
     return errors
 
 
+# Claims the portal made about itself that the backend contradicts, and the
+# invented record data it rendered to support them. Both are checked here rather
+# than in the portal's own test suite because the contradiction is between two
+# halves of the repo: JSX asserting a capability, and guardrails.py refusing it.
+PORTAL_FORBIDDEN = [
+    (re.compile(r"(?i)connected to your (?:academic )?record"),
+     "claims the assistant is connected to the student's record"),
+    (re.compile(r"(?i)(?:reviewing|checking|reading) your (?:academic )?record"),
+     "claims to be reading the student's record"),
+    (re.compile(r"متصل\s+بسجلك"), "claims to be connected to the student's record (ar)"),
+    (re.compile(r"(?:أراجع|أقرأ|اطّلع على)\s+سجلك"),
+     "claims to be reading the student's record (ar)"),
+    (re.compile(r"(?i)\bties the answer to your (?:current )?record\b"),
+     "claims answers are tied to the student's record"),
+    # Invented record content. The product cannot know any of these, so a
+    # literal in the UI layer can only have been made up.
+    (re.compile(r"\b(?:COMP|ENCS|ENEE|MATH|PHYS)\s?\d{3,4}\b"),
+     "hard-codes a course code as if it were the student's enrolment"),
+    (re.compile(r"\d+\s*د\.أ"), "hard-codes a currency balance"),
+    (re.compile(r"\b[0-4]\.\d{2}\s*/\s*4\.00\b"), "hard-codes a GPA"),
+]
+
+
+def check_portal_claims_only_what_it_does() -> int:
+    """The portal may not describe a capability the guardrail refuses.
+
+    The student portal shipped a dashboard of invented courses, a GPA, a 240 JD
+    balance and a "Connected to your academic record" status line — over a
+    backend that declines every personal-record question by design and says the
+    limitation is permanent. Nothing in the build could notice, because the
+    claims lived only in JSX.
+
+    A file may quote a forbidden pattern while explaining that it was removed;
+    lines that are comments are therefore exempt, which is what lets the
+    tombstone files record what they used to contain.
+    """
+    errors = 0
+    if not PORTAL_SRC.is_dir():
+        print("  note: portal source not present; skipped")
+        return 0
+    for path in sorted(PORTAL_SRC.rglob("*.ts*")):
+        rel = path.relative_to(ROOT)
+        for number, line in enumerate(path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
+            stripped = line.lstrip()
+            if stripped.startswith(("//", "*", "/*")):
+                continue
+            for pattern, description in PORTAL_FORBIDDEN:
+                if pattern.search(line):
+                    print(f"  ERROR {rel}:{number} {description}")
+                    errors += 1
+    if not errors:
+        print("  portal describes only capabilities the backend has")
+    return errors
+
+
 def check_identity_is_consistent() -> int:
     """The system prompt and the store listing must agree on what this is."""
     from ritaj.generate import SYSTEM_PROMPT
@@ -164,6 +219,8 @@ def main() -> None:
     errors += check_matches_manifest()
     print("\nPortal data collection\n")
     errors += check_portal_collects_no_name()
+    print("\nPortal capability claims\n")
+    errors += check_portal_claims_only_what_it_does()
     print("\nProduct identity\n")
     errors += check_identity_is_consistent()
 

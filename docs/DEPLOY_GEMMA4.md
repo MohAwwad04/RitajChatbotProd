@@ -198,3 +198,32 @@ No server-side rollback depends on a Chrome Web Store review.
 4. **The Chrome Web Store extension id** — needed for the production CORS
    allowlist, and only known after the first submission.
 5. **An Oracle account and region** — for the self-host benchmarks in §2.3.
+
+---
+
+## 5. Hugging Face Space specifics
+
+Folded in from `DEPLOYMENT.md`, which this document supersedes. These are the
+host facts that survived the provider change and the popup→side-panel
+conversion; everything else in that file described a build that no longer
+exists.
+
+- **A fine-grained HF token 403s on Space creation.** `scripts/deploy_space.py`
+  needs a **Write** token.
+- **The Space runtime user is non-root (UID 1000).** Writable paths must live
+  under `/tmp` — hence `QDRANT_PATH=/tmp/qdrant` — and any baked cache directory
+  needs its permissions opened at build time.
+- **Embedded Qdrant survives the two-process startup because it is on disk.**
+  `ensure_index.py` runs as a separate process and writes `/tmp/qdrant`; uvicorn
+  then reads it. A `:memory:` client would not cross the process boundary, and
+  the service would come up with an empty store and answer nothing.
+- **The Space serves the privacy policy itself** at `/privacy`
+  (`src/ritaj/static/privacy.html`), which is the URL the store listing and the
+  extension both point at. A gist copy will drift; the served page cannot,
+  because `scripts/check_privacy.py` reads it.
+- **`/live` binds before initialization.** Anything moved in front of the port
+  bind reproduces the outage that made the platform kill the container as
+  unhealthy — see `CLAUDE.md` §"Architecture invariants".
+
+Admin accounts, secret rotation and the incident runbook live in
+[`OPERATIONS.md`](OPERATIONS.md) §3, not here.

@@ -3,7 +3,7 @@
   "specVersion": "1.5",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-08-05T14:27:45+00:00",
+    "timestamp": "2026-08-15T19:38:31+00:00",
     "component": {
       "type": "application",
       "name": "ritaj-assistant"
@@ -1996,16 +1996,16 @@
     {
       "type": "library",
       "name": "pypdf",
-      "version": "6.13.3",
-      "purl": "pkg:pypi/pypdf@6.13.3",
+      "version": "6.14.2",
+      "purl": "pkg:pypi/pypdf@6.14.2",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "c6e3f86afb625791510b02ad5480e94b63970bb957df75d44657c282ecc52224"
+          "content": "3f07891af76dc002657e04993ab9b4de81de29f9013b9761d0b7968bff12e946"
         },
         {
           "alg": "SHA-256",
-          "content": "f3cb822769725f1bac658c406cfc9460399043f3750c2d3e4650e0a85eacabd7"
+          "content": "7873f502fe4385e79539b21d872392dc0c4e3714327c15881cbc7fbfd1f95b25"
         }
       ]
     },
@@ -3391,16 +3391,16 @@
     {
       "type": "library",
       "name": "setuptools",
-      "version": "81.0.0",
-      "purl": "pkg:pypi/setuptools@81.0.0",
+      "version": "83.0.0",
+      "purl": "pkg:pypi/setuptools@83.0.0",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "487b53915f52501f0a79ccfd0c02c165ffe06631443a886740b91af4b7a5845a"
+          "content": "025bccbbf0fa05b6192bc64ae1e7b16e001fd6d6d4d5de03c97b1c1ade523bef"
         },
         {
           "alg": "SHA-256",
-          "content": "fdd925d5c5d9f62e4b74b30d6dd7828ce236fd6ed998a08d81de62ce5a6310d6"
+          "content": "29b23c360f22f414dc7336bb39178cc7bcbf6021ed2733cde173f09dba19abb3"
         }
       ]
     },
@@ -3543,48 +3543,48 @@
     {
       "type": "library",
       "name": "torch",
-      "version": "2.12.1",
-      "purl": "pkg:pypi/torch@2.12.1",
+      "version": "2.13.0",
+      "purl": "pkg:pypi/torch@2.13.0",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "2afbb2bdaa8a95040e733f05492ddf133c3967c9b7ce0abd218d704b6cab437d"
+          "content": "024c6cc0c1b085f2f91f20a3dc27b0471d021c31ce84b81be3afdc39f791fd9d"
         },
         {
           "alg": "SHA-256",
-          "content": "a513506cfda3c1c78dabeb6574c1597538c0254b3d39af174dde35d8177f4ce3"
+          "content": "2fe228aba290d14b9f31b049be550dbd469c3fd3013d7a19705b30454da97027"
         },
         {
           "alg": "SHA-256",
-          "content": "c75e93173c700bccd6bfcc4a9d19ce242ab6dacd1f1781483027a16239b9e650"
+          "content": "33449899ce5496c1b84b4853179d94fd102028ae1407314d9fb956bb79e70d09"
         },
         {
           "alg": "SHA-256",
-          "content": "d2dd0f2c5f7ccbddaf34cade0deaf476808368f902b9cdb7f36a2ab42301bc0e"
+          "content": "49b58f1e2c52440abb6f17c28f0335fe6c6d01ad1a7f55b0183b81e4b34d64e6"
         },
         {
           "alg": "SHA-256",
-          "content": "dd15595f8fc764cffde8c6361a3beb6ef69a028c851b1b3e70e077f615980d4e"
+          "content": "4f8573e3ce9ebcd53fe922f01077a6085ccdfbe5f12fd215883a9d87d7a744fd"
         },
         {
           "alg": "SHA-256",
-          "content": "e86550597877fb272ddc52db2f85b82cb601ea7bd932576a0340152cae2200b3"
+          "content": "a0d8b11f16a48d60e2015d8213aa0390744cbebb98e58b62b3514dddc656e330"
         },
         {
           "alg": "SHA-256",
-          "content": "e9b6f7d2dd66ea87a3ae620069d31335d594c06effb1a383bdd21cfe61e44ece"
+          "content": "a7de8a313090dc5c7d7ba4bfe5c3be222528f9a4dba1acc83bddb1157360c4b8"
         },
         {
           "alg": "SHA-256",
-          "content": "ef81f503912effea2ce3d9b12a2e3a6ed488943e91271c90c7a829f60baf6aa2"
+          "content": "c28def70706c2f9ecc752574766e8ae4da9b810ab6676b611166761a78a9f1e1"
         },
         {
           "alg": "SHA-256",
-          "content": "f6dc4caf7eb4adb38a2d9f536b51db56310fdd1254e69a2d96767e1367c892b3"
+          "content": "d849b390e07d8d333ce8ecaf91b273c656c598379a19c9acf1318a883f6b391c"
         },
         {
           "alg": "SHA-256",
-          "content": "f92609e3b3ce72f25e2eb780d043ced2480c1a86c47c852604fc7a9108648386"
+          "content": "e76f9bcecc52b8ff711239a2f7547d5353df95878ab232f0773c1d95928b92f8"
         }
       ],
       "scope": "sys_platform != 'linux'"

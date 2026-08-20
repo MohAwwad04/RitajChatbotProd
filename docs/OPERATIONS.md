@@ -14,6 +14,13 @@ duty with no name is a duty nobody performs. Assign a primary and a backup —
 one person is a single point of failure, and pilots run during term time when
 people have exams.
 
+This table is **machine-checked**: `python scripts/check_operations.py` parses
+§1 and §4 and exits 1 while any Primary or Backup cell is blank, or any drill
+lacks a date and a recovery time. It rejects placeholders too — "TBD", "the
+team" and "maintainers" are not owners, because when everybody is responsible
+nobody is paged. It runs advisory in CI and blocking at release
+(`docs/RELEASE_CHECKLIST.md` §E).
+
 | Duty | Primary | Backup | Access needed |
 |---|---|---|---|
 | Service uptime, Hugging Face deployment | | | HF write token, Space settings |

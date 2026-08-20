@@ -16,14 +16,23 @@ node --test chrome-extension/navigation.test.mjs
 python scripts/check_corpus_policy.py       # every chunk traces to an approved Ritaj URL
 python scripts/check_navigation.py          # destinations reviewed; 18 URL attacks rejected
 python scripts/check_extension.py           # minimal permissions; allowlist + limit parity
-python scripts/check_privacy.py             # disclosures match the code
+python scripts/check_privacy.py             # disclosures match the code; portal claims match the guardrail
+python scripts/check_operations.py          # every duty and drill has a named owner and a date
 python scripts/eval_release.py              # refusals, injection, URL + navigation precision
 python scripts/eval_release.py --gate       # release-set completeness
 python scripts/lock_deps.py --check         # dependency lock matches pyproject
-python scripts/secret_inventory.py          # secrets present; nothing committed or packaged
+
+# SBOM before packaging, in this order. `sbom.py` REWRITES release/sbom.json and
+# therefore dirties the tree, and `package_extension.py --verify` refuses a dirty
+# tree — running them the other way round (as this checklist used to) fails on a
+# clean checkout. Commit the regenerated file before continuing.
+python scripts/sbom.py --check-current      # committed SBOM still describes the tree
+python scripts/sbom.py                      # regenerate; commit if it changed
 python scripts/sbom.py --check-pinned       # deployables reproducible
+
+python scripts/secret_inventory.py          # secrets present; nothing committed or packaged
 python scripts/loadtest.py                  # concurrency, limits, budget, soak
-python scripts/package_extension.py --verify   # deterministic ZIP
+python scripts/package_extension.py --verify   # deterministic ZIP, clean tree only
 node scripts/e2e_extension.mjs              # real Chromium, unpacked extension
 pip-audit -r requirements.lock.txt          # no known vulnerabilities in what ships
 cd ritaj-student-portal && npm run lint && npm run build
@@ -128,6 +137,10 @@ not the click itself:
       ([`docs/OPERATIONS.md`](OPERATIONS.md) §3).
 - [ ] Rollback drills rehearsed and timed (OPERATIONS §4). A rollback that has
       never been performed is a plan, not a capability.
+- [ ] **`python scripts/check_operations.py` exits 0** — blocking here, advisory
+      in CI. It is the machine check for the two items above: it fails while any
+      duty lacks a primary or a backup, or any drill lacks a date and a recovery
+      time, and rejects "TBD"/"the team" as owners.
 - [ ] `TRUSTED_PROXY_COUNT` confirmed against the host. `/ready` reports
       `client_addressing.ok` — if false, the network rate limit is either global
       (every student in one bucket) or client-choosable (no limit at all).

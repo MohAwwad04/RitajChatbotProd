@@ -5,58 +5,36 @@ export type ChatMessage = {
   role: 'user' | 'assistant'
   content: string
   time: string
-  type?: 'registration'
   links?: PageLink[]
   images?: TeamImage[]
 }
 
-export const initialMessages: ChatMessage[] = [
-  {
-    id: 1,
-    role: 'assistant',
-    content: 'أهلاً براء، أنا مساعد رتاج الأكاديمي. أستطيع قراءة جدولك وخطتك وسجلك المالي لمساعدتك في اتخاذ الخطوة التالية.',
-    time: '10:24',
-  },
-  {
-    id: 2,
-    role: 'user',
-    content: 'هل أنا جاهز للتسجيل في الدورة الصيفية؟ وما المساقات التي تقترحها؟',
-    time: '10:25',
-  },
-  {
-    id: 3,
-    role: 'assistant',
-    content: 'أنت قريب من الجاهزية. راجعت خطتك الحالية وموعد تسجيلك، وهذه أهم النقاط قبل أن تبدأ:',
-    time: '10:25',
-    type: 'registration',
-  },
-]
+// One conversation in *this* browser session. Nothing is persisted: the server
+// is stateless by design and the client owns the transcript, so a reload starts
+// clean. That is also why the sidebar can list these honestly — they are real
+// conversations the student had a moment ago, unlike the four hard-coded
+// "recent chats" ("COMP 433 exam date", "Financial record details") this file
+// used to export, which appeared identically for every visitor on first load.
+export type Conversation = {
+  id: string
+  title: string
+  messages: ChatMessage[]
+}
 
-export const suggestions = [
-  'لخّص وضعي الأكاديمي',
-  'متى امتحاني القادم؟',
-  'ما المتبقي من خطتي؟',
-  'اشرح رصيدي المالي',
-]
+// `initialMessages`, `suggestions`, `recentChats` and `answerFor` are gone.
+// `answerFor` was a keyword-matching fake responder that invented balances,
+// exam dates and remaining credit hours in the UI layer — a second, ungrounded
+// answer path sitting next to the cited one.
 
-export const recentChats = [
-  { title: 'التسجيل للدورة الصيفية', time: 'الآن', active: true },
-  { title: 'متطلبات التخرج المتبقية', time: 'أمس' },
-  { title: 'موعد امتحان COMP 433', time: '18 حزيران' },
-  { title: 'تفاصيل السجل المالي', time: '12 حزيران' },
-]
+export const newSessionId = (): string =>
+  typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
-export function answerFor(message: string): ChatMessage {
-  const normalized = message.toLowerCase()
-  let content = 'بحسب سجلك الحالي، أنت مسجل في 5 مساقات وأنجزت 108 ساعات من أصل 132. يمكنني تفصيل الخطة أو الجدول أو السجل المالي إذا حددت ما تريد مراجعته.'
-
-  if (normalized.includes('امتحان') || normalized.includes('موعد')) {
-    content = 'امتحانك القادم هو هندسة البرمجيات COMP 433 يوم 29 حزيران الساعة 09:00 صباحاً. أنصحك بمراجعة تعليمات القاعة قبل الموعد بيوم.'
-  } else if (normalized.includes('مالي') || normalized.includes('رصيد')) {
-    content = 'يوجد رصيد مستحق بقيمة 240 د.أ. يجب تسويته قبل بدء تسجيل الدورة الصيفية. يمكنك فتح السجل المالي لمعرفة تفاصيل الحركات والدفعات.'
-  } else if (normalized.includes('خطة') || normalized.includes('متبقي') || normalized.includes('تخرج')) {
-    content = 'أنجزت 108 من أصل 132 ساعة. المتبقي 24 ساعة تشمل متطلبات التخصص ومشروع التخرج. سأرتبها لك حسب الأولوية والمتطلبات السابقة.'
-  }
-
-  return { id: Date.now() + 1, role: 'assistant', content, time: new Date().toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' }) }
+// A conversation is titled by its first question, which is the only label the
+// client can produce without asking the student for one.
+export function titleFor(conversation: Conversation, fallback: string): string {
+  const first = conversation.messages.find((message) => message.role === 'user')
+  if (!first) return fallback
+  return first.content.length > 42 ? `${first.content.slice(0, 42)}…` : first.content
 }

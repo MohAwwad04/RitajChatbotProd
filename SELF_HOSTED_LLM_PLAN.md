@@ -1,5 +1,15 @@
 # Self-Hosted LLM Plan — run your own Gemma, no APIs, no call limits
 
+> **HISTORICAL (July 2026) — read the environment tables here as "was", not
+> "is".** The provider is now Cloudflare Workers AI running Gemma 4, decided in
+> [`docs/adr/ADR-001-llm-provider.md`](docs/adr/ADR-001-llm-provider.md); every
+> `LLM_BASE_URL=https://api.groq.com/...` below is stale, and `DEPLOYMENT.md`,
+> which this document says it sits next to, is superseded by
+> [`docs/DEPLOY_GEMMA4.md`](docs/DEPLOY_GEMMA4.md). The *reasoning* is still
+> live: the self-host path survives as the Oracle Always Free fallback in
+> DEPLOY_GEMMA4 §2, and the OpenAI-compatible seam it relies on is why swapping
+> providers stayed a configuration change.
+
 > Goal (your words): keep the RAG chatbot **live**, but replace the hosted Groq
 > API with **your own Gemma** (`gemma4:e2b`, the one already working locally),
 > hosted on a **free** server, **independent**, with **no call/rate limits**.
