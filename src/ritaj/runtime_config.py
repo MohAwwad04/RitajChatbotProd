@@ -47,7 +47,16 @@ DEFAULTS: dict = {
     "min_claim_words": 4,
     # Generation
     "temperature": 0.2,
-    "max_tokens": 1024,
+    # 2048, not 1024. The configured model reasons before answering and there is
+    # no way to stop it: reasoning_effort (low/none), reasoning.effort and
+    # thinking.type=disabled were all tested against the live provider on
+    # 2026-08-20 and every one was silently ignored — reasoning length did not
+    # drop. At 1024 a real RAG question consumed the entire budget on reasoning
+    # and returned nothing, and a second one was truncated mid-sentence.
+    #
+    # Raising the cap costs nothing by itself: billing is on tokens actually
+    # produced, so this only spends more on the calls that genuinely need it.
+    "max_tokens": 2048,
     "llm_model": "",  # "" = fall back to config.settings.llm_model
 }
 
