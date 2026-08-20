@@ -82,3 +82,8 @@ release/
 # Built corpus artifacts. data/corpus/CURRENT and the artifact directories are
 # build outputs; the manifest that produces them (data/sources.yaml) is tracked.
 data/corpus/
+
+# Operator plaintext — generated locally, moved to a password manager, deleted.
+# Untracked is not enough: one `git add -A` turns an untracked secret into a
+# committed one, and ritaj_rag_admins.rtf is why this project knows that.
+OPERATOR-PASSWORD.txt
