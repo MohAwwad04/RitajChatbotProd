@@ -55,13 +55,31 @@ class Settings:
         "RERANK_REVISION", "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
     )
 
-    # Vector store (Qdrant). A remote http URL talks to a Qdrant server (Docker in
-    # dev). Set QDRANT_PATH instead to run Qdrant embedded on local disk — no
-    # separate service needed, which is what the single-container HF Spaces deploy
-    # uses (the index is rebuilt from data/raw on boot).
+    # Vector store (Qdrant).
+    #
+    # QDRANT_MODE makes the choice explicit instead of inferring it from which
+    # variable happens to be set. The old rule was "QDRANT_PATH wins if
+    # non-empty", which meant a deployment carrying both a cloud URL and a
+    # leftover path silently ran embedded against an empty local directory and
+    # reported itself healthy — the failure looks exactly like an empty corpus.
+    #
+    #   embedded  Qdrant on local disk at QDRANT_PATH. No separate service. What
+    #             the single-container Spaces deploy uses.
+    #   remote    A Qdrant server at QDRANT_URL, with QDRANT_API_KEY over TLS
+    #             for Qdrant Cloud.
+    #   auto      Legacy inference, kept so an existing deployment does not break
+    #             on upgrade: path if set, else url.
+    qdrant_mode: str = os.getenv("QDRANT_MODE", "auto").strip().lower()
     qdrant_url: str = os.getenv("QDRANT_URL", "http://localhost:6333")
     qdrant_path: str = os.getenv("QDRANT_PATH", "")
+    qdrant_api_key: str = os.getenv("QDRANT_API_KEY", "")
+    qdrant_timeout_seconds: float = float(os.getenv("QDRANT_TIMEOUT_SECONDS", "10"))
     collection: str = os.getenv("COLLECTION", "ritaj")
+    # The name clients read. Indexing writes `ritaj_<corpus-version>` and points
+    # this alias at it only after the new collection validates, so a rebuild
+    # never leaves the live name pointing at a half-filled collection — and the
+    # previous one survives for an instant rollback.
+    qdrant_alias: str = os.getenv("QDRANT_COLLECTION_ALIAS", "")
 
     # Retrieval
     top_k: int = int(os.getenv("TOP_K", "6"))
@@ -222,4 +240,70 @@ def check_production_config() -> list[str]:
         problems.append("LLM_API_KEY is unset or still the Ollama placeholder")
     if settings.chat_log_mode not in {"aggregate", "full"}:
         problems.append(f"CHAT_LOG_MODE must be 'aggregate' or 'full', got {settings.chat_log_mode!r}")
+    problems.extend(qdrant_problems())
     return problems
+
+
+def qdrant_mode() -> str:
+    """The resolved store mode: 'embedded' or 'remote'.
+
+    `auto` reproduces the historical rule so an existing deployment keeps
+    working; anything explicit is honoured exactly, which is the point.
+    """
+    declared = settings.qdrant_mode
+    if declared in {"embedded", "remote"}:
+        return declared
+    return "embedded" if settings.qdrant_path else "remote"
+
+
+def qdrant_problems() -> list[str]:
+    """Store configuration that is ambiguous or unsafe. [] = fine.
+
+    Separated from check_production_config so the indexing job — which runs
+    outside the server and must not start against the wrong cluster — can call
+    it too.
+    """
+    problems: list[str] = []
+    mode = qdrant_mode()
+
+    if settings.qdrant_mode not in {"embedded", "remote", "auto"}:
+        problems.append(
+            f"QDRANT_MODE must be 'embedded', 'remote' or 'auto', got {settings.qdrant_mode!r}"
+        )
+
+    if mode == "embedded":
+        if not settings.qdrant_path:
+            problems.append("QDRANT_MODE=embedded but QDRANT_PATH is empty")
+        if settings.qdrant_api_key:
+            # A key present in embedded mode means someone believes they are
+            # talking to Qdrant Cloud and are not. Refusing is the only way that
+            # belief gets corrected before the corpus appears to vanish.
+            problems.append(
+                "QDRANT_API_KEY is set but the store is embedded — the key would "
+                "be ignored and the cloud collection never read"
+            )
+    else:
+        if not settings.qdrant_url:
+            problems.append("QDRANT_MODE=remote but QDRANT_URL is empty")
+        elif production():
+            if not settings.qdrant_url.startswith("https://"):
+                problems.append(
+                    f"QDRANT_URL must be https in production, got {_scheme_of(settings.qdrant_url)!r}"
+                )
+            if not settings.qdrant_api_key:
+                problems.append("QDRANT_MODE=remote in production but QDRANT_API_KEY is empty")
+        if settings.qdrant_path and settings.qdrant_mode == "remote":
+            problems.append(
+                "QDRANT_MODE=remote but QDRANT_PATH is also set — unset it, or the "
+                "next person to read this config cannot tell which store is live"
+            )
+    return problems
+
+
+def _scheme_of(url: str) -> str:
+    """The scheme of `url`, for an error message that never echoes the host.
+
+    A Qdrant Cloud URL identifies the cluster, and error strings reach logs and
+    sometimes clients. Only the scheme is ever quoted back.
+    """
+    return url.split("://", 1)[0] if "://" in url else "(none)"
