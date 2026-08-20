@@ -455,9 +455,32 @@ them to Upstash Redis or document the reset explicitly.
 | 8 | Corpus poisoning through ingestion | Source policy, checksums, named approval, quarantine |
 | 9 | Backend impersonation | The extension re-validates every URL it receives; it trusts neither model output nor arbitrary backend URLs |
 
+### CORS is not a control on this host
+
+Measured 20 Aug 2026. The application's CORS allowlist is correct — run against
+the same production configuration locally, it blocks `https://evil.example.com`
+and blocks an unknown `chrome-extension://` origin, allowing only the configured
+origin.
+
+**The Hugging Face proxy overrides that in front of the app.** Live, every
+origin is echoed back in `access-control-allow-origin`, including
+`evil.example.com`. The proxy also answers OPTIONS preflights itself: a route
+the application does not serve returns `200` to a preflight and `404` to a GET,
+which is how the behaviour was traced to the platform rather than to us.
+
+Consequences, and neither is optional:
+
+- **Do not treat CORS as a quota control on this host.** Anything that must
+  actually be enforced has to be enforced server-side. The two rate-limit
+  buckets, the daily neuron budget and the concurrency cap are the real
+  controls; CORS is defence in depth that this platform removes.
+- `check_production_config()` still refuses a wildcard `CORS_ORIGINS`, and that
+  stays worthwhile — it is correct on any host that does not rewrite the header,
+  including the Oracle fallback.
+
 **Residual, accepted:** free tiers carry no SLA; the admin bearer token is held
 in local storage (documented XSS exposure); a compromised approver could
-introduce a bad source.
+introduce a bad source; CORS is unenforceable on the current host, as above.
 
 ---
 
@@ -504,7 +527,11 @@ returns empty answers.
 
 Stated so it is not mistaken for tested:
 
-- The extension against the live backend.
+- ~~The extension against the live backend.~~ **Verified 20 Aug** —
+  `node scripts/e2e_live.mjs`, 6/6: it reaches the deployment, renders the four
+  server-supplied destinations, shows the real chat state, receives the genuine
+  `503 NO_CORPUS` refusal rather than a network error, and contacts no other
+  host. Clicking the toolbar icon remains a manual check.
 - Three consecutive cold starts.
 - Any behaviour with a real corpus — none exists.
 - Latency as a distribution. Two samples (9.7 s, 12.2 s complete answer against
