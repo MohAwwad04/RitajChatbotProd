@@ -10,7 +10,10 @@ right Ritaj page.
 
 > **Operational detail lives in [`HANDBOOK.md`](HANDBOOK.md)** — state,
 > architecture, deployment, corpus handling, release, operations, security and
-> decisions. This file and that one are the only two you need.
+> decisions.
+>
+> **[`STATUS.md`](STATUS.md) says what is broken right now** and which decision
+> is waiting. Read it before assuming anything below works end to end.
 
 ---
 

@@ -3,8 +3,14 @@
 **Everything operational, in one file.** State, architecture, deployment, corpus
 handling, release, operations, security, decisions, and what remains.
 
-Companion document: [`README.md`](README.md) — what this is and how to run it.
-Those two are the only documents you need. §12 lists what they replaced.
+Companion documents: [`README.md`](README.md) — what this is and how to run it;
+[`STATUS.md`](STATUS.md) — what is broken right now and which decision is
+waiting. §12 lists what these replaced.
+
+> **As of 21 Aug the model call does not work in production.** The Hugging Face
+> container cannot complete a TLS handshake to Cloudflare's API — zero provider
+> calls have ever succeeded from it. Everything else in this handbook is live and
+> verified. See `STATUS.md` before relying on any answer path.
 
 **Last measured:** 20 August 2026. Every figure below came from running the
 command beside it. Where something is unmeasured, it says so.
